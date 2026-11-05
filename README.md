@@ -20,12 +20,23 @@ A number-guessing game built with Streamlit. The starter app was AI-generated an
 python -m pytest
 ```
 
+### Running the evaluation suite
+
+```bash
+python -m evaluation.run
+```
+
+Exits non-zero if any case fails, so it works as a CI gate. See
+[docs/evaluation.md](docs/evaluation.md).
+
 ## 🏗️ Architecture
 
 - `logic_utils.py`: pure rules (difficulty settings, input parsing, `check_guess`, scoring). No Streamlit imports.
 - `game.py`: `GameState` (a frozen dataclass) and the transitions `new_game` and `submit_guess`.
 - `app.py`: Streamlit UI only. It reads widgets, calls `game.py`, and renders results.
+- `evaluation/`: dataset-driven evaluation framework (cases, executors, runner, metrics, reports, CLI).
 - `tests/`: unit tests per module, plus `test_app_flow.py` and `test_regressions.py`, which run the app through Streamlit's `AppTest`.
+- `docs/`: [architecture](docs/architecture.md), [design decisions](docs/design-decisions.md), [evaluation](docs/evaluation.md).
 
 ## 🐞 Bugs Investigated and Fixed
 
@@ -41,7 +52,7 @@ python -m pytest
 
 The suite covers parsing, difficulty settings, scoring, game-state transitions, and the Streamlit flow. Checks include that a guess too high gets "Go LOWER!", that invalid or out-of-range input never uses up an attempt, and that a new game after a win is playable again.
 
-Run it with `python -m pytest`. Current result: **106 passed**.
+Run it with `python -m pytest`. Current result: **149 passed**.
 
 ## 📋 Rules (current behavior)
 

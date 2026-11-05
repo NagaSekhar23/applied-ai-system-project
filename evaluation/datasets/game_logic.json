@@ -1,0 +1,531 @@
+{
+  "name": "game-logic",
+  "version": 1,
+  "description": "Deterministic behavior of the guessing game: comparison, input validation, scoring, difficulty configuration, and multi-step game flow. Every expected value is derived from the documented game rules in docs/architecture.md.",
+  "cases": [
+    {
+      "id": "cmp-win-exact",
+      "category": "comparison",
+      "target": "check_guess",
+      "input": { "guess": 50, "secret": 50 },
+      "expected": { "outcome": "Win", "hint": "🎉 Correct!" },
+      "expected_behavior": "An exact match is a win."
+    },
+    {
+      "id": "cmp-too-high",
+      "category": "comparison",
+      "target": "check_guess",
+      "input": { "guess": 60, "secret": 50 },
+      "expected": { "outcome": "Too High", "hint": "📉 Go LOWER!" },
+      "expected_behavior": "A guess above the secret tells the player to go lower."
+    },
+    {
+      "id": "cmp-too-low",
+      "category": "comparison",
+      "target": "check_guess",
+      "input": { "guess": 40, "secret": 50 },
+      "expected": { "outcome": "Too Low", "hint": "📈 Go HIGHER!" },
+      "expected_behavior": "A guess below the secret tells the player to go higher."
+    },
+    {
+      "id": "cmp-regression-9-vs-10",
+      "category": "comparison",
+      "target": "check_guess",
+      "input": { "guess": 9, "secret": 10 },
+      "expected": { "outcome": "Too Low" },
+      "expected_behavior": "Numeric comparison, not text: '9' sorts after '10' as a string.",
+      "metadata": { "tags": ["regression"] }
+    },
+    {
+      "id": "cmp-regression-10-vs-9",
+      "category": "comparison",
+      "target": "check_guess",
+      "input": { "guess": 10, "secret": 9 },
+      "expected": { "outcome": "Too High" },
+      "expected_behavior": "Mirror of the lexicographic regression case.",
+      "metadata": { "tags": ["regression"] }
+    },
+    {
+      "id": "cmp-boundary-min",
+      "category": "comparison",
+      "target": "check_guess",
+      "input": { "guess": 1, "secret": 1 },
+      "expected": { "outcome": "Win" },
+      "expected_behavior": "The lowest valid value can win."
+    },
+    {
+      "id": "cmp-off-by-one-above",
+      "category": "comparison",
+      "target": "check_guess",
+      "input": { "guess": 51, "secret": 50 },
+      "expected": { "outcome": "Too High" },
+      "expected_behavior": "One above the secret is too high, not a win."
+    },
+    {
+      "id": "cmp-off-by-one-below",
+      "category": "comparison",
+      "target": "check_guess",
+      "input": { "guess": 49, "secret": 50 },
+      "expected": { "outcome": "Too Low" },
+      "expected_behavior": "One below the secret is too low, not a win."
+    },
+
+    {
+      "id": "input-empty-string",
+      "category": "input_validation",
+      "target": "parse_guess",
+      "input": { "raw": "" },
+      "expected": { "ok": false, "value": null, "error": "Enter a guess." },
+      "expected_behavior": "An empty box asks for a guess."
+    },
+    {
+      "id": "input-null",
+      "category": "input_validation",
+      "target": "parse_guess",
+      "input": { "raw": null },
+      "expected": { "ok": false, "error": "Enter a guess." },
+      "expected_behavior": "A missing value is treated as empty, not an error."
+    },
+    {
+      "id": "input-whitespace-only",
+      "category": "input_validation",
+      "target": "parse_guess",
+      "input": { "raw": "   " },
+      "expected": { "ok": false, "error": "Enter a guess." },
+      "expected_behavior": "Whitespace alone counts as empty."
+    },
+    {
+      "id": "input-letters",
+      "category": "input_validation",
+      "target": "parse_guess",
+      "input": { "raw": "abc" },
+      "expected": { "ok": false, "error": "That is not a whole number." },
+      "expected_behavior": "Non-numeric text is rejected."
+    },
+    {
+      "id": "input-decimal",
+      "category": "input_validation",
+      "target": "parse_guess",
+      "input": { "raw": "7.9" },
+      "expected": { "ok": false, "error": "That is not a whole number." },
+      "expected_behavior": "Decimals are rejected rather than silently truncated."
+    },
+    {
+      "id": "input-scientific-notation",
+      "category": "input_validation",
+      "target": "parse_guess",
+      "input": { "raw": "1e3" },
+      "expected": { "ok": false, "error": "That is not a whole number." },
+      "expected_behavior": "Scientific notation is not a whole number."
+    },
+    {
+      "id": "input-spaced-digits",
+      "category": "input_validation",
+      "target": "parse_guess",
+      "input": { "raw": "4 2" },
+      "expected": { "ok": false, "error": "That is not a whole number." },
+      "expected_behavior": "Internal whitespace is not stripped."
+    },
+    {
+      "id": "input-non-ascii-digits",
+      "category": "input_validation",
+      "target": "parse_guess",
+      "input": { "raw": "٤٢" },
+      "expected": { "ok": false, "error": "That is not a whole number." },
+      "expected_behavior": "Only ASCII digits are accepted, so input is predictable across keyboards.",
+      "metadata": { "tags": ["regression", "unicode"] }
+    },
+    {
+      "id": "input-valid-simple",
+      "category": "input_validation",
+      "target": "parse_guess",
+      "input": { "raw": "42" },
+      "expected": { "ok": true, "value": 42, "error": null },
+      "expected_behavior": "A plain in-range integer is accepted."
+    },
+    {
+      "id": "input-surrounding-whitespace",
+      "category": "input_validation",
+      "target": "parse_guess",
+      "input": { "raw": "  42  " },
+      "expected": { "ok": true, "value": 42 },
+      "expected_behavior": "Surrounding whitespace is ignored."
+    },
+    {
+      "id": "input-explicit-plus",
+      "category": "input_validation",
+      "target": "parse_guess",
+      "input": { "raw": "+7" },
+      "expected": { "ok": true, "value": 7 },
+      "expected_behavior": "A leading plus sign is accepted."
+    },
+    {
+      "id": "input-leading-zeros",
+      "category": "input_validation",
+      "target": "parse_guess",
+      "input": { "raw": "000042" },
+      "expected": { "ok": true, "value": 42 },
+      "expected_behavior": "Leading zeros are not significant and remain accepted."
+    },
+    {
+      "id": "input-boundary-low-inclusive",
+      "category": "boundary",
+      "target": "parse_guess",
+      "input": { "raw": "1" },
+      "expected": { "ok": true, "value": 1 },
+      "expected_behavior": "The lower bound is inclusive."
+    },
+    {
+      "id": "input-boundary-high-inclusive",
+      "category": "boundary",
+      "target": "parse_guess",
+      "input": { "raw": "100" },
+      "expected": { "ok": true, "value": 100 },
+      "expected_behavior": "The upper bound is inclusive."
+    },
+    {
+      "id": "input-just-below-range",
+      "category": "boundary",
+      "target": "parse_guess",
+      "input": { "raw": "0" },
+      "expected": { "ok": false, "error": "Your guess must be between 1 and 100." },
+      "expected_behavior": "One below the lower bound is rejected."
+    },
+    {
+      "id": "input-just-above-range",
+      "category": "boundary",
+      "target": "parse_guess",
+      "input": { "raw": "101" },
+      "expected": { "ok": false, "error": "Your guess must be between 1 and 100." },
+      "expected_behavior": "One above the upper bound is rejected."
+    },
+    {
+      "id": "input-negative",
+      "category": "boundary",
+      "target": "parse_guess",
+      "input": { "raw": "-5" },
+      "expected": { "ok": false, "error": "Your guess must be between 1 and 100." },
+      "expected_behavior": "Negative numbers parse but fall outside the range."
+    },
+    {
+      "id": "input-oversized-digits",
+      "category": "edge_case",
+      "target": "parse_guess",
+      "input": { "raw": "9999999999999999999999999" },
+      "expected": { "ok": false, "error": "Your guess must be between 1 and 100." },
+      "expected_behavior": "Values over 18 significant digits are rejected as out of range without crashing int().",
+      "metadata": { "tags": ["regression", "crash"] }
+    },
+    {
+      "id": "input-nineteen-digits",
+      "category": "edge_case",
+      "target": "parse_guess",
+      "input": { "raw": "1000000000000000000" },
+      "expected": { "ok": false },
+      "expected_behavior": "19 significant digits is the first rejected length."
+    },
+    {
+      "id": "input-easy-range-rejects-21",
+      "category": "boundary",
+      "target": "parse_guess",
+      "input": { "raw": "21", "low": 1, "high": 20 },
+      "expected": { "ok": false, "error": "Your guess must be between 1 and 20." },
+      "expected_behavior": "The error message uses the supplied bounds, not hard-coded ones."
+    },
+    {
+      "id": "input-easy-range-accepts-20",
+      "category": "boundary",
+      "target": "parse_guess",
+      "input": { "raw": "20", "low": 1, "high": 20 },
+      "expected": { "ok": true, "value": 20 },
+      "expected_behavior": "The Easy upper bound is inclusive."
+    },
+
+    {
+      "id": "score-win-first-guess",
+      "category": "scoring",
+      "target": "update_score",
+      "input": { "current_score": 0, "outcome": "Win", "guess_number": 1 },
+      "expected": { "score": 90 },
+      "expected_behavior": "max(10, 100 - 10*1) = 90."
+    },
+    {
+      "id": "score-win-second-guess",
+      "category": "scoring",
+      "target": "update_score",
+      "input": { "current_score": 0, "outcome": "Win", "guess_number": 2 },
+      "expected": { "score": 80 },
+      "expected_behavior": "max(10, 100 - 10*2) = 80."
+    },
+    {
+      "id": "score-win-reaches-floor",
+      "category": "scoring",
+      "target": "update_score",
+      "input": { "current_score": 0, "outcome": "Win", "guess_number": 9 },
+      "expected": { "score": 10 },
+      "expected_behavior": "Win points bottom out at 10."
+    },
+    {
+      "id": "score-win-beyond-floor",
+      "category": "scoring",
+      "target": "update_score",
+      "input": { "current_score": 0, "outcome": "Win", "guess_number": 20 },
+      "expected": { "score": 10 },
+      "expected_behavior": "Win points never go below 10 however long the game ran."
+    },
+    {
+      "id": "score-win-adds-to-existing",
+      "category": "scoring",
+      "target": "update_score",
+      "input": { "current_score": 40, "outcome": "Win", "guess_number": 2 },
+      "expected": { "score": 120 },
+      "expected_behavior": "Win points are added to the running score."
+    },
+    {
+      "id": "score-wrong-high-from-zero",
+      "category": "scoring",
+      "target": "update_score",
+      "input": { "current_score": 0, "outcome": "Too High", "guess_number": 1 },
+      "expected": { "score": 0 },
+      "expected_behavior": "A penalty at zero stays at zero."
+    },
+    {
+      "id": "score-wrong-low-from-zero",
+      "category": "scoring",
+      "target": "update_score",
+      "input": { "current_score": 0, "outcome": "Too Low", "guess_number": 3 },
+      "expected": { "score": 0 },
+      "expected_behavior": "The floor applies in both directions."
+    },
+    {
+      "id": "score-wrong-from-positive",
+      "category": "scoring",
+      "target": "update_score",
+      "input": { "current_score": 10, "outcome": "Too High", "guess_number": 2 },
+      "expected": { "score": 5 },
+      "expected_behavior": "A wrong guess costs 5 points."
+    },
+    {
+      "id": "score-wrong-even-attempt-no-bonus",
+      "category": "scoring",
+      "target": "update_score",
+      "input": { "current_score": 20, "outcome": "Too High", "guess_number": 4 },
+      "expected": { "score": 15 },
+      "expected_behavior": "An even-numbered attempt gets no bonus; the original code added 5 here.",
+      "metadata": { "tags": ["regression"] }
+    },
+    {
+      "id": "score-unknown-outcome-raises",
+      "category": "error_handling",
+      "target": "update_score",
+      "input": { "current_score": 0, "outcome": "Maybe", "guess_number": 1 },
+      "expected": { "raised": "ValueError" },
+      "expected_behavior": "An unrecognised outcome fails loudly rather than silently returning the old score."
+    },
+
+    {
+      "id": "difficulty-easy",
+      "category": "difficulty",
+      "target": "difficulty_config",
+      "input": { "difficulty": "Easy" },
+      "expected": { "low": 1, "high": 20, "max_attempts": 6, "attempt_limit": 6 },
+      "expected_behavior": "Easy is 1-20 with 6 attempts."
+    },
+    {
+      "id": "difficulty-normal",
+      "category": "difficulty",
+      "target": "difficulty_config",
+      "input": { "difficulty": "Normal" },
+      "expected": { "low": 1, "high": 100, "max_attempts": 8 },
+      "expected_behavior": "Normal is 1-100 with 8 attempts."
+    },
+    {
+      "id": "difficulty-hard",
+      "category": "difficulty",
+      "target": "difficulty_config",
+      "input": { "difficulty": "Hard" },
+      "expected": { "low": 1, "high": 50, "max_attempts": 5 },
+      "expected_behavior": "Hard is 1-50 with 5 attempts."
+    },
+    {
+      "id": "difficulty-unknown-raises",
+      "category": "error_handling",
+      "target": "difficulty_config",
+      "input": { "difficulty": "Impossible" },
+      "expected": { "raised": "ValueError" },
+      "expected_behavior": "An unknown difficulty fails loudly instead of defaulting to Normal.",
+      "metadata": { "tags": ["regression"] }
+    },
+
+    {
+      "id": "flow-win-on-first-guess",
+      "category": "game_flow",
+      "target": "game_flow",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": { "guesses": ["50"] },
+      "expected": {
+        "status": "won",
+        "attempts_used": 1,
+        "score": 90,
+        "history": [50]
+      },
+      "expected_behavior": "Winning immediately scores 90 and ends the game."
+    },
+    {
+      "id": "flow-win-after-wrong-guesses",
+      "category": "game_flow",
+      "target": "game_flow",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": { "guesses": ["60", "40", "50"] },
+      "expected": {
+        "status": "won",
+        "attempts_used": 3,
+        "score": 70,
+        "history": [60, 40, 50],
+        "outcomes": ["Too High", "Too Low", "Win"]
+      },
+      "expected_behavior": "Penalties floor at 0, then the win on guess 3 adds 70."
+    },
+    {
+      "id": "flow-invalid-input-costs-no-attempt",
+      "category": "game_flow",
+      "target": "game_flow",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": { "guesses": ["abc", "500", ""] },
+      "expected": {
+        "status": "playing",
+        "attempts_used": 0,
+        "attempts_left": 8,
+        "score": 0,
+        "history": [],
+        "error_count": 3
+      },
+      "expected_behavior": "Invalid, out-of-range and empty input are all rejected without consuming attempts.",
+      "metadata": { "tags": ["regression"] }
+    },
+    {
+      "id": "flow-mixed-valid-and-invalid",
+      "category": "game_flow",
+      "target": "game_flow",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": { "guesses": ["abc", "60", "xyz", "50"] },
+      "expected": {
+        "status": "won",
+        "attempts_used": 2,
+        "score": 80,
+        "history": [60, 50],
+        "error_count": 2
+      },
+      "expected_behavior": "Only valid guesses advance the game; history records just those."
+    },
+    {
+      "id": "flow-lose-after-eight-guesses",
+      "category": "game_over",
+      "target": "game_flow",
+      "initial_state": { "difficulty": "Normal", "secret": 99 },
+      "input": { "guesses": ["1", "2", "3", "4", "5", "6", "7", "8"] },
+      "expected": {
+        "status": "lost",
+        "attempts_used": 8,
+        "attempts_left": 0,
+        "score": 0
+      },
+      "expected_behavior": "Normal allows exactly 8 valid guesses before the game is lost."
+    },
+    {
+      "id": "flow-seventh-guess-still-playing",
+      "category": "game_over",
+      "target": "game_flow",
+      "initial_state": { "difficulty": "Normal", "secret": 99 },
+      "input": { "guesses": ["1", "2", "3", "4", "5", "6", "7"] },
+      "expected": { "status": "playing", "attempts_used": 7, "attempts_left": 1 },
+      "expected_behavior": "The seventh wrong guess must not end a Normal game.",
+      "metadata": { "tags": ["regression"] }
+    },
+    {
+      "id": "flow-guess-after-win-rejected",
+      "category": "game_over",
+      "target": "game_flow",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": { "guesses": ["50", "50"] },
+      "expected": {
+        "status": "won",
+        "attempts_used": 1,
+        "score": 90,
+        "error_count": 1,
+        "errors": ["This game is over. Start a new game to play again."]
+      },
+      "expected_behavior": "A finished game rejects further guesses without changing state."
+    },
+    {
+      "id": "flow-win-on-final-attempt",
+      "category": "game_over",
+      "target": "game_flow",
+      "initial_state": { "difficulty": "Hard", "secret": 25 },
+      "input": { "guesses": ["1", "2", "3", "4", "25"] },
+      "expected": { "status": "won", "attempts_used": 5, "score": 50 },
+      "expected_behavior": "A win on the last allowed attempt wins rather than losing."
+    },
+    {
+      "id": "flow-hard-lose",
+      "category": "game_over",
+      "target": "game_flow",
+      "initial_state": { "difficulty": "Hard", "secret": 25 },
+      "input": { "guesses": ["1", "2", "3", "4", "5"] },
+      "expected": { "status": "lost", "attempts_used": 5, "max_attempts": 5 },
+      "expected_behavior": "Hard allows only 5 attempts."
+    },
+    {
+      "id": "flow-hard-rejects-out-of-range",
+      "category": "difficulty",
+      "target": "game_flow",
+      "initial_state": { "difficulty": "Hard", "secret": 25 },
+      "input": { "guesses": ["51"] },
+      "expected": {
+        "status": "playing",
+        "attempts_used": 0,
+        "error_count": 1,
+        "high": 50
+      },
+      "expected_behavior": "Hard tops out at 50, so 51 is out of range even though it is valid on Normal."
+    },
+    {
+      "id": "flow-easy-rejects-out-of-range",
+      "category": "difficulty",
+      "target": "game_flow",
+      "initial_state": { "difficulty": "Easy", "secret": 10 },
+      "input": { "guesses": ["21"] },
+      "expected": { "status": "playing", "attempts_used": 0, "error_count": 1, "high": 20 },
+      "expected_behavior": "Easy tops out at 20."
+    },
+    {
+      "id": "flow-difficulty-change-resets-game",
+      "category": "difficulty",
+      "target": "game_flow",
+      "initial_state": { "difficulty": "Normal", "secret": 99 },
+      "input": { "guesses": ["1", "2"], "change_difficulty_to": "Hard" },
+      "expected": {
+        "difficulty": "Hard",
+        "status": "playing",
+        "attempts_used": 0,
+        "score": 0,
+        "history": [],
+        "low": 1,
+        "high": 50,
+        "max_attempts": 5
+      },
+      "expected_behavior": "Changing difficulty starts a fresh game with the new range and limit.",
+      "metadata": { "tags": ["regression"] }
+    },
+    {
+      "id": "flow-score-floor-across-sequence",
+      "category": "scoring",
+      "target": "game_flow",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": { "guesses": ["10", "20", "30"] },
+      "expected": { "score": 0, "attempts_used": 3, "status": "playing" },
+      "expected_behavior": "Repeated penalties stop at zero rather than going negative.",
+      "metadata": { "tags": ["regression"] }
+    }
+  ]
+}
