@@ -137,3 +137,84 @@ Bugs found during development each got a regression test written **before** the
 fix, and the test was confirmed failing first. That is why `test_regressions.py`
 and `test_phase1_review.py` exist as separate files: they document defects, not
 just behavior.
+
+---
+
+## Phase 3 components: the LLM layer
+
+```
+config.py        Settings from environment variables. Never holds defaults
+                 that require credentials.
+schemas.py       Pydantic models for validated model output.
+prompts/         Versioned prompt templates. Data, not logic.
+providers/
+  base.py        LLMProvider protocol, request/response types, error taxonomy.
+  mock.py        MockProvider + ScriptedProvider. No network, no key.
+  anthropic_provider.py  The real Claude API, SDK imported lazily.
+  client.py      ReliableLLMClient: bounded retries, structured validation.
+  __init__.py    build_provider() / build_client() factories.
+assistant.py     The boundary service. Enforces the three guarantees below.
+ui/              Streamlit pages: game.py, assistant_page.py.
+```
+
+### The provider abstraction
+
+Application code imports from `providers`, never from `anthropic`. A provider
+implements one method:
+
+```python
+def complete(self, request: LLMRequest) -> LLMResponse: ...
+```
+
+Vendor exceptions are translated into this project's own error taxonomy
+(`LLMTimeoutError`, `LLMRateLimitError`, `LLMAuthError`, …), so retry logic and
+the UI never branch on a vendor class. Adding a provider means adding one class.
+
+The `anthropic` SDK is imported *inside* the constructor, so the package is
+optional and the entire test suite runs without it.
+
+### Request path for a hint
+
+```
+Assistant.hint(state, last_outcome)
+   │
+   ├── build_facts(state)          redacted: no secret while status == "playing"
+   ├── get_prompt("hint")          versioned template
+   ├── ReliableLLMClient.complete_structured(request, AssistantHint)
+   │      ├── provider.complete()         bounded retries on transient errors
+   │      ├── extract_json()              tolerates fences and surrounding prose
+   │      └── AssistantHint.model_validate()   retried on near-miss output
+   │
+   ├── leaks_secret(message, state)       -> fallback if the secret appears
+   ├── category cross-check               -> deterministic outcome wins
+   └── AssistantReply(source="llm" | "fallback")
+```
+
+### Three enforced guarantees
+
+1. **The secret never enters a prompt mid-game.** `build_facts` omits the key
+   entirely while `status == "playing"`. This is structural: a prompt cannot
+   leak a value it never received.
+2. **The model never decides an outcome.** `check_guess` decides. The model's
+   `hint_category` is compared against it and overridden on disagreement, with
+   the correction recorded in `AssistantReply.warnings`.
+3. **The game always works.** Provider failure, timeout, retry exhaustion,
+   malformed JSON, schema violation and secret leakage all fall back to a
+   deterministic hint. `source` is shown in the UI so the user can tell which
+   they are reading.
+
+### Reliability
+
+| Failure | Handling |
+|---|---|
+| Timeout | Retried, bounded by `LLM_MAX_RETRIES`, exponential backoff |
+| Rate limit | Retried, honouring the provider's `retry-after` when present |
+| 5xx / connection | Retried |
+| Auth / bad request | **Not** retried — the same request fails the same way |
+| Malformed JSON | Retried, then fallback |
+| Schema violation | Retried, then fallback |
+| Model refusal | Translated to a bad request, then fallback |
+
+Token usage is reported as `None` when the provider does not supply it. It is
+never estimated for a real provider, because a fabricated count would corrupt
+cost reporting. The mock provider labels its counts as estimates.

@@ -17,6 +17,8 @@ pip-wheel-metadata/
 .env
 .env.*
 *.env
+# The template carries placeholders only and must be committed.
+!.env.example
 
 # Streamlit
 .streamlit/secrets.toml

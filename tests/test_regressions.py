@@ -66,6 +66,10 @@ def test_new_game_after_win_allows_play_again():
 
     _button(at, "New Game").click()
     at.run()
+    # Pin the new secret away from the guess below. Without this the fresh
+    # random secret is occasionally 10, the guess wins, and the assertion
+    # below fails for a reason unrelated to what this test is about.
+    _set_secret(at, 99)
     _submit(at, "10")
 
     assert "already won" not in _all_text(at)

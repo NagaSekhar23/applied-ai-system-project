@@ -1,0 +1,283 @@
+{
+  "name": "llm-assistant",
+  "version": 1,
+  "description": "Deterministic properties of the LLM assistant layer: structured-output validation, enforcement of the deterministic outcome, secret-leak prevention, and fallback behavior. Runs against mock and scripted providers, so it needs no API key. It does NOT measure hint phrasing quality, which requires a real provider and is not claimed here.",
+  "cases": [
+    {
+      "id": "hint-too-high-uses-llm",
+      "category": "assistant_success",
+      "target": "assistant_hint",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": { "provider": "mock", "last_outcome": "Too High" },
+      "expected": {
+        "source": "llm",
+        "category": "too_high",
+        "leaks_secret": false,
+        "message_is_non_empty": true
+      },
+      "expected_behavior": "A working provider produces a validated hint matching the deterministic outcome."
+    },
+    {
+      "id": "hint-too-low-uses-llm",
+      "category": "assistant_success",
+      "target": "assistant_hint",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": { "provider": "mock", "last_outcome": "Too Low" },
+      "expected": { "source": "llm", "category": "too_low", "leaks_secret": false },
+      "expected_behavior": "Too Low maps to the too_low category."
+    },
+    {
+      "id": "hint-opening-no-guesses",
+      "category": "assistant_success",
+      "target": "assistant_hint",
+      "initial_state": { "difficulty": "Hard", "secret": 25 },
+      "input": { "provider": "mock" },
+      "expected": { "source": "llm", "category": "opening", "leaks_secret": false },
+      "expected_behavior": "With no previous outcome the assistant gives opening guidance."
+    },
+    {
+      "id": "hint-records-prompt-version",
+      "category": "assistant_success",
+      "target": "assistant_hint",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": { "provider": "mock", "last_outcome": "Too High" },
+      "expected": { "prompt_id": "assistant_hint@1.0.0" },
+      "expected_behavior": "Replies record which prompt version produced them."
+    },
+    {
+      "id": "rules-explanation-uses-rules-prompt",
+      "category": "assistant_success",
+      "target": "assistant_hint",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": { "provider": "mock", "purpose": "explain_rules" },
+      "expected": { "source": "llm", "prompt_id": "assistant_rules@1.0.0", "leaks_secret": false },
+      "expected_behavior": "The rules prompt is selected for rule explanations."
+    },
+
+    {
+      "id": "fallback-on-timeout-exhaustion",
+      "category": "fallback",
+      "target": "assistant_hint",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": {
+        "provider": "scripted",
+        "script": ["timeout", "timeout", "timeout"],
+        "max_retries": 1,
+        "last_outcome": "Too High"
+      },
+      "expected": {
+        "source": "fallback",
+        "category": "too_high",
+        "used_llm": false,
+        "has_fallback_reason": true,
+        "message_is_non_empty": true
+      },
+      "expected_behavior": "When every attempt times out, the deterministic hint is served and still carries the right direction."
+    },
+    {
+      "id": "fallback-on-rate-limit-exhaustion",
+      "category": "fallback",
+      "target": "assistant_hint",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": {
+        "provider": "scripted",
+        "script": ["rate_limit", "rate_limit", "rate_limit"],
+        "max_retries": 1,
+        "last_outcome": "Too Low"
+      },
+      "expected": { "source": "fallback", "category": "too_low", "used_llm": false },
+      "expected_behavior": "Rate limiting degrades to the deterministic hint rather than failing."
+    },
+    {
+      "id": "fallback-on-malformed-output",
+      "category": "fallback",
+      "target": "assistant_hint",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": {
+        "provider": "scripted",
+        "script": ["this is not json", "still not json"],
+        "max_retries": 1,
+        "last_outcome": "Too High"
+      },
+      "expected": { "source": "fallback", "used_llm": false, "has_fallback_reason": true },
+      "expected_behavior": "Unparseable output is never shown to the player."
+    },
+    {
+      "id": "fallback-on-schema-violation",
+      "category": "fallback",
+      "target": "assistant_hint",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": {
+        "provider": "scripted",
+        "script": [
+          "{\"message\": \"hi\", \"hint_category\": \"sideways\"}",
+          "{\"message\": \"hi\", \"hint_category\": \"sideways\"}"
+        ],
+        "max_retries": 1,
+        "last_outcome": "Too High"
+      },
+      "expected": { "source": "fallback", "used_llm": false },
+      "expected_behavior": "Output with an invalid enum value fails validation and falls back."
+    },
+    {
+      "id": "fallback-recovers-after-one-failure",
+      "category": "fallback",
+      "target": "assistant_hint",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": {
+        "provider": "scripted",
+        "script": [
+          "timeout",
+          "{\"message\": \"Try lower.\", \"hint_category\": \"too_high\", \"difficulty_level\": \"Normal\", \"reveals_secret\": false}"
+        ],
+        "max_retries": 1,
+        "last_outcome": "Too High"
+      },
+      "expected": { "source": "llm", "attempts": 2, "category": "too_high" },
+      "expected_behavior": "A bounded retry recovers from one transient failure."
+    },
+
+    {
+      "id": "safety-secret-leak-forces-fallback",
+      "category": "safety",
+      "target": "assistant_hint",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": {
+        "provider": "scripted",
+        "script": [
+          "{\"message\": \"The number is 50.\", \"hint_category\": \"too_high\", \"difficulty_level\": \"Normal\", \"reveals_secret\": false}",
+          "{\"message\": \"The number is 50.\", \"hint_category\": \"too_high\", \"difficulty_level\": \"Normal\", \"reveals_secret\": false}"
+        ],
+        "max_retries": 1,
+        "last_outcome": "Too High"
+      },
+      "expected": { "source": "fallback", "leaks_secret": false },
+      "expected_behavior": "Output disclosing the secret mid-game is suppressed, even though the model claimed reveals_secret false."
+    },
+    {
+      "id": "safety-model-cannot-override-outcome",
+      "category": "safety",
+      "target": "assistant_hint",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": {
+        "provider": "scripted",
+        "script": [
+          "{\"message\": \"Go higher.\", \"hint_category\": \"too_low\", \"difficulty_level\": \"Normal\", \"reveals_secret\": false}"
+        ],
+        "max_retries": 0,
+        "last_outcome": "Too High"
+      },
+      "expected": { "source": "llm", "category": "too_high", "warning_count": 1 },
+      "expected_behavior": "The deterministic outcome overrides the model's category, and the disagreement is recorded."
+    },
+    {
+      "id": "safety-model-cannot-declare-a-win",
+      "category": "safety",
+      "target": "assistant_hint",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": {
+        "provider": "scripted",
+        "script": [
+          "{\"message\": \"You won!\", \"hint_category\": \"win\", \"difficulty_level\": \"Normal\", \"reveals_secret\": false}"
+        ],
+        "max_retries": 0,
+        "last_outcome": "Too Low"
+      },
+      "expected": { "category": "too_low", "warning_count": 1 },
+      "expected_behavior": "The model cannot award a win the game did not award."
+    },
+    {
+      "id": "safety-prompt-omits-secret-while-playing",
+      "category": "safety",
+      "target": "prompt_safety",
+      "initial_state": { "difficulty": "Normal", "secret": 42, "status": "playing" },
+      "input": { "last_outcome": "Too High" },
+      "expected": {
+        "facts_contain_secret": false,
+        "prompt_leaks_secret": false,
+        "mentions_restrictions": true
+      },
+      "expected_behavior": "The secret is never placed in a prompt during play, so no prompt can leak it."
+    },
+    {
+      "id": "safety-prompt-includes-secret-after-game-over",
+      "category": "safety",
+      "target": "prompt_safety",
+      "initial_state": { "difficulty": "Normal", "secret": 42, "status": "won" },
+      "input": {},
+      "expected": { "facts_contain_secret": true },
+      "expected_behavior": "Once the game is over the secret is public and may be explained."
+    },
+
+    {
+      "id": "schema-accepts-valid-payload",
+      "category": "schema_validation",
+      "target": "schema_validation",
+      "input": {
+        "payload": {
+          "message": "Try lower.",
+          "hint_category": "too_high",
+          "difficulty_level": "Normal",
+          "reveals_secret": false
+        }
+      },
+      "expected": { "valid": true, "category": "too_high" },
+      "expected_behavior": "A well-formed payload validates."
+    },
+    {
+      "id": "schema-rejects-unknown-category",
+      "category": "schema_validation",
+      "target": "schema_validation",
+      "input": { "payload": { "message": "hi", "hint_category": "sideways" } },
+      "expected": { "valid": false, "error_type": "ValidationError" },
+      "expected_behavior": "An out-of-enum category is rejected."
+    },
+    {
+      "id": "schema-rejects-blank-message",
+      "category": "schema_validation",
+      "target": "schema_validation",
+      "input": { "payload": { "message": "   ", "hint_category": "too_high" } },
+      "expected": { "valid": false },
+      "expected_behavior": "A blank message is rejected rather than shown to the player."
+    },
+    {
+      "id": "schema-rejects-missing-fields",
+      "category": "schema_validation",
+      "target": "schema_validation",
+      "input": { "payload": { "message": "hi" } },
+      "expected": { "valid": false },
+      "expected_behavior": "A missing required field is rejected."
+    },
+    {
+      "id": "schema-ignores-extra-fields",
+      "category": "schema_validation",
+      "target": "schema_validation",
+      "input": {
+        "payload": {
+          "message": "Try lower.",
+          "hint_category": "too_high",
+          "difficulty_level": "Normal",
+          "reveals_secret": false,
+          "unexpected_extra": "ignored"
+        }
+      },
+      "expected": { "valid": true },
+      "expected_behavior": "Unexpected extra fields are ignored rather than causing a failure."
+    },
+    {
+      "id": "schema-trims-whitespace",
+      "category": "schema_validation",
+      "target": "schema_validation",
+      "input": {
+        "payload": {
+          "message": "  Try lower.  ",
+          "hint_category": "too_high",
+          "difficulty_level": "Normal",
+          "reveals_secret": false
+        }
+      },
+      "expected": { "valid": true, "message": "Try lower." },
+      "expected_behavior": "Surrounding whitespace is stripped from the message."
+    }
+  ]
+}

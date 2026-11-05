@@ -1,3 +1,6 @@
 streamlit>=1.28
 altair<5
 pydantic>=2.0
+
+# Optional: only needed for LLM_PROVIDER=anthropic. The app runs in mock mode without it.
+anthropic>=0.40

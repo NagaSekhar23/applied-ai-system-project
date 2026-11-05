@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 from evaluation.cases import DatasetError, discover_datasets, load_dataset
+from evaluation.registry import full_registry
 from evaluation.report import render_text, write_reports
 from evaluation.runner import run_dataset
 
@@ -68,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 2
 
-        run = run_dataset(dataset)
+        run = run_dataset(dataset, registry=full_registry())
 
         if args.quiet:
             m = run.metrics

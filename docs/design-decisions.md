@@ -143,3 +143,80 @@ genuinely needs one.
 
 **Trade-off.** The root directory grows over time. Mitigated by keeping each
 package single-purpose and documenting responsibilities in `architecture.md`.
+
+---
+
+## D10 — Mock provider as the default
+
+**Problem.** A portfolio project that needs a paid API key to start is a
+project nobody runs, and a test suite that costs money per run is a test suite
+nobody runs.
+
+**Decision.** `LLM_PROVIDER` defaults to `mock`. The mock reads the same
+structured facts block the real provider receives and returns schema-valid
+output, so validation, fallback, cross-checking and evaluation are all
+genuinely exercised offline.
+
+**Alternatives.**
+- *Skip LLM tests without a key.* Rejected: the interesting logic (validation,
+  fallback, safety) would then be untested in CI.
+- *Record/replay real responses.* Rejected: more machinery than this needs, and
+  fixtures go stale silently.
+
+**Trade-off.** Mock output cannot show whether phrasing is good. That is stated
+explicitly in the evaluation dataset rather than papered over.
+
+---
+
+## D11 — Retries live in the client, not the SDK
+
+**Decision.** `AnthropicProvider` is constructed with `max_retries=0`;
+`ReliableLLMClient` owns retrying.
+
+**Rationale.** Retry behavior is then identical across providers, testable
+against a scripted provider with an injected `sleep`, and countable — the
+retry and timeout counts feed the observability layer in Phase 6. Two layers
+of retry would also silently multiply (3 × 3 = 9 real calls).
+
+---
+
+## D12 — Validation failures are retried like transient errors
+
+**Decision.** Output that parses but fails schema validation is retried,
+bounded by the same `max_retries`.
+
+**Rationale.** Models occasionally emit a near-miss. One cheap retry often
+fixes it, and the bound means a persistently broken response still terminates
+and falls back.
+
+**Trade-off.** A deterministic schema bug costs `max_retries` wasted calls
+before surfacing. Accepted: `validation_failures` is counted separately in
+`CallStats` precisely so that pattern is visible.
+
+---
+
+## D13 — Structural secret redaction, not prompt instruction
+
+**Decision.** The secret is omitted from the facts dict while a game is in
+progress, in addition to a prompt restriction and an output leak check.
+
+**Rationale.** A prompt instruction is a request, not a guarantee. Defence in
+depth: the model cannot reveal what it never received (structural), is told not
+to (prompt), and output is checked anyway (`leaks_secret`) in case a future
+change weakens the first two.
+
+**Trade-off.** The assistant cannot give proximity hints like "very close".
+Accepted: leaking the answer would break the game.
+
+---
+
+## D14 — `claude-opus-5-5` as the default model
+
+**Decision.** Default to `claude-opus-5-5`, overridable with `LLM_MODEL`, at
+`LLM_EFFORT=low`.
+
+**Rationale.** Model choice is a cost decision that belongs to whoever runs the
+project, so the default is the current general-purpose model rather than a
+quietly cheaper one. Effort defaults to `low` because generating a one-sentence
+hint is a simple task and effort is the right lever for that, not model
+downgrade. Both are one environment variable away from changing.
