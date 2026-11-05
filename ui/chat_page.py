@@ -12,7 +12,7 @@ import streamlit as st
 
 from assistant import Assistant
 from config import Settings
-from observability import Component, Status, get_tracker
+from observability import Status, get_tracker
 from natural_language import (
     CommandExecutor,
     CommandParser,

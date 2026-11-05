@@ -33,7 +33,7 @@ explains results, parses language and picks tools, but never decides anything.
 Concretely: `check_guess` returns Too High, and the assistant's job is to turn
 that into a sentence. If the model claims a different outcome, my code
 overrides it and logs the disagreement. That boundary is why the whole system
-is testable without an API key — 510 tests, no network — and why a provider
+is testable without an API key — 518 tests, no network — and why a provider
 outage degrades the product instead of breaking it."
 
 ---
@@ -193,7 +193,7 @@ state, expected output and a plain-English `expected_behavior`. Validated by
 Pydantic before any case runs. Comparison is a *subset* match, so a case
 asserts only what it's about.
 
-**In this project.** 169 cases across five datasets. Cases tagged `regression`
+**In this project.** 174 cases across five datasets. Cases tagged `regression`
 reproduce defects that were actually found and fixed here.
 
 **Question.** *"How do you know your AI system works?"*

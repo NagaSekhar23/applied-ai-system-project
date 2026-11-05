@@ -12,7 +12,7 @@ import streamlit as st
 
 from assistant import Assistant, AssistantReply
 from config import Settings
-from observability import Component, get_tracker
+from observability import get_tracker
 from providers import build_client
 
 

@@ -10,6 +10,7 @@ would dominate the run time and measure nothing useful.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from evaluation.cases import EvalCase
@@ -18,24 +19,53 @@ from evaluation.rag_metrics import score_retrieval
 from providers import MockProvider, ReliableLLMClient, ScriptedProvider
 from retrieval import AnswerGenerator, PassthroughReranker, RagPipeline
 
-_PIPELINE_CACHE: dict[str, RagPipeline] = {}
+_PIPELINE_CACHE: dict[tuple[str, str], RagPipeline] = {}
+
+# A frozen corpus, used for any case that asserts on *rank*.
+#
+# Retrieval rank is a property of the whole corpus: adding a document that
+# mentions the same terms shifts every ranking. The live corpus is this
+# project's own documentation, which changes on most commits, so rank
+# assertions against it break for reasons unrelated to retrieval quality —
+# which happened twice while this project was being built.
+#
+# Ground truth needs a stable substrate. Rank-sensitive cases therefore run
+# against these fixtures, while cases that assert only "the right document
+# was found" run against the live corpus, where that property is robust.
+FIXTURE_SOURCES = (
+    "search.md",
+    "caching.md",
+    "deployment.md",
+    "testing.md",
+)
+FIXTURE_ROOT = str(Path(__file__).parent / "fixtures" / "corpus")
 
 
 def _no_sleep(_seconds: float) -> None:
     pass
 
 
-def get_pipeline(reranker: str = "heuristic") -> RagPipeline:
-    """Build and cache a pipeline. Ingestion is expensive and deterministic."""
-    if reranker not in _PIPELINE_CACHE:
+def get_pipeline(reranker: str = "heuristic", corpus: str = "live") -> RagPipeline:
+    """Build and cache a pipeline. Ingestion is expensive and deterministic.
+
+    Args:
+        reranker: ``heuristic`` or ``passthrough``.
+        corpus: ``live`` for the project's own docs, ``fixture`` for the
+            frozen evaluation corpus.
+    """
+    key = (reranker, corpus)
+    if key not in _PIPELINE_CACHE:
         client = ReliableLLMClient(MockProvider(), sleep=_no_sleep)
         pipeline = RagPipeline(
             reranker=PassthroughReranker() if reranker == "passthrough" else None,
             generator=AnswerGenerator(client),
         )
-        pipeline.build()
-        _PIPELINE_CACHE[reranker] = pipeline
-    return _PIPELINE_CACHE[reranker]
+        if corpus == "fixture":
+            pipeline.build(sources=FIXTURE_SOURCES, root=FIXTURE_ROOT)
+        else:
+            pipeline.build()
+        _PIPELINE_CACHE[key] = pipeline
+    return _PIPELINE_CACHE[key]
 
 
 def execute_rag_retrieval(case: EvalCase) -> dict[str, Any]:
@@ -43,7 +73,10 @@ def execute_rag_retrieval(case: EvalCase) -> dict[str, Any]:
 
     def run() -> dict[str, Any]:
         k = case.input.get("k", 4)
-        pipeline = get_pipeline(case.input.get("reranker", "heuristic"))
+        pipeline = get_pipeline(
+            case.input.get("reranker", "heuristic"),
+            case.input.get("corpus", "live"),
+        )
         result = pipeline.retrieve(case.input["query"], top_k=k)
 
         retrieved_sources = [item.chunk.source_path for item in result.evidence]
@@ -118,8 +151,6 @@ def execute_citation_validation(case: EvalCase) -> dict[str, Any]:
     """Validate a supplied answer string against a synthetic evidence list."""
 
     def run() -> dict[str, Any]:
-        from dataclasses import dataclass as _dataclass
-
         from retrieval.chunking import Chunk
         from retrieval.citations import validate_citations
         from retrieval.hybrid import FusedChunk

@@ -543,3 +543,70 @@ def test_score_retrieval_bundles_all_three():
     assert scores.precision_at_k == pytest.approx(1 / 3)
     assert scores.reciprocal_rank == 0.5
     json.dumps(scores.to_dict())
+
+
+# --- Evaluation corpus stability ---------------------------------------------
+# Rank-sensitive evaluation ran against the live documentation and broke twice
+# when that documentation was edited. These tests pin the fix: rank metrics now
+# use a frozen fixture corpus.
+
+
+def test_fixture_corpus_is_indexed():
+    from evaluation.rag_executors import get_pipeline
+
+    pipeline = get_pipeline("heuristic", "fixture")
+    assert pipeline.stats.documents == 4
+    assert pipeline.stats.chunks > 0
+    assert pipeline.stats.skipped == []
+
+
+def test_fixture_corpus_is_separate_from_the_live_corpus():
+    from evaluation.rag_executors import get_pipeline
+
+    fixture = get_pipeline("heuristic", "fixture")
+    live = get_pipeline("heuristic", "live")
+    assert fixture is not live
+    assert fixture.stats.documents != live.stats.documents
+
+
+@pytest.mark.parametrize(
+    "query, expected_source",
+    [
+        ("How does BM25 score a passage?", "search.md"),
+        ("What invalidates a prefix cache?", "caching.md"),
+        ("What causes flaky tests?", "testing.md"),
+        ("What is a canary release?", "deployment.md"),
+    ],
+)
+def test_fixture_corpus_ranks_are_unambiguous(query, expected_source):
+    """Rank assertions are only meaningful if the corpus gives a clear winner."""
+    from evaluation.rag_executors import get_pipeline
+
+    evidence = get_pipeline("heuristic", "fixture").retrieve(query, top_k=4).evidence
+    assert evidence[0].chunk.source_path == expected_source
+
+
+def test_rank_metrics_survive_an_edit_to_the_live_corpus(tmp_path, monkeypatch):
+    """Editing project documentation must not move fixture-corpus ranks.
+
+    This is the regression the fixture corpus exists to prevent: twice during
+    development, writing docs *about* retrieval changed retrieval rankings and
+    failed evaluation cases for reasons unrelated to retrieval quality.
+    """
+    from evaluation.rag_executors import get_pipeline
+
+    before = [
+        e.chunk.chunk_id
+        for e in get_pipeline("heuristic", "fixture").retrieve("How does BM25 score a passage?", 4).evidence
+    ]
+
+    # A fixture pipeline reads only evaluation/fixtures/corpus, so a document
+    # added anywhere else cannot affect it.
+    extra = tmp_path / "extra.md"
+    extra.write_text("# BM25 scoring and chunking\n\nBM25 BM25 BM25 scoring.", encoding="utf-8")
+
+    after = [
+        e.chunk.chunk_id
+        for e in get_pipeline("heuristic", "fixture").retrieve("How does BM25 score a passage?", 4).evidence
+    ]
+    assert before == after

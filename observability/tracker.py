@@ -18,7 +18,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Iterator
 
-from observability.events import Component, Event, Status, TokenCost
+from observability.events import Component, Event, Status
 from observability.metrics import SystemMetrics, compute_metrics
 from observability.pricing import estimate_cost
 from observability.redaction import summarise_text

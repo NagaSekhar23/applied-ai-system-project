@@ -560,3 +560,41 @@ right document but cannot always rank it first", not "retrieval is perfect".
 Distinguishing a passage that mentions a term from one that explains it needs
 semantics, which is precisely what the lexical embedder lacks. The fix is a
 trained embedding model, and the `Embedder` protocol is already in place.
+
+---
+
+## D36 — Rank-sensitive evaluation runs against a frozen corpus
+
+**Problem.** D35 relaxed two retrieval cases after the README rewrite moved
+their rankings. That fix did not hold: the very commit that documented the
+limitation added a design-decision entry mentioning `p95_latency_ms` and
+`chunking strategy`, which shifted the rankings again and re-failed the cases.
+
+Twice is a pattern, not an accident. Retrieval rank is a property of the
+*whole corpus*. The live corpus is this project's documentation, which changes
+on most commits, so any rank assertion against it is a tripwire on unrelated
+edits.
+
+**Decision.** Split the RAG dataset across two corpora:
+
+- Cases asserting only robust properties ("the relevant document was
+  retrieved") run against the **live** docs.
+- Cases asserting **rank** (`reciprocal_rank`, `top_is_relevant`) run against
+  a **frozen fixture corpus** in `evaluation/fixtures/corpus/`, four small
+  documents marked do-not-edit.
+
+**Alternatives.**
+- *Keep relaxing expectations after each break.* Rejected: the measurement
+  would erode until it measured nothing.
+- *Stop asserting rank anywhere.* Rejected: MRR and Precision@K are the
+  metrics that distinguish good retrieval from retrieval that merely returns
+  the right document somewhere in the top k.
+- *Tune the reranker until the live cases pass.* Rejected as overfitting to
+  named queries, and it would not have fixed the P95 case anyway.
+
+**Rationale.** Ground truth needs a stable substrate. This is why retrieval
+benchmarks ship fixed corpora rather than pointing at a living wiki.
+
+**Verification.** `test_rank_metrics_survive_an_edit_to_the_live_corpus` pins
+it, and appending an adversarial paragraph (mentioning chunking, p95, RRF and
+BM25) to the live docs now leaves every fingerprint unchanged.

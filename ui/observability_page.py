@@ -10,12 +10,7 @@ from __future__ import annotations
 import streamlit as st
 
 from evaluation.report import load_latest_reports
-from observability import (
-    PRICING_SNAPSHOT_DATE,
-    Component,
-    Status,
-    get_tracker,
-)
+from observability import PRICING_SNAPSHOT_DATE, Status, get_tracker
 
 REPORT_DIR = "reports"
 

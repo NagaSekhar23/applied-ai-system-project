@@ -43,9 +43,9 @@
         "query": "What does reciprocal rank fusion do?",
         "relevant_sources": ["docs/rag-architecture.md"]
       },
-      "expected": { "found_any_relevant": true, "reciprocal_rank": 0.5 },
-      "expected_behavior": "A question about RRF retrieves the RAG architecture document, at document-rank 2. The README ranks first because it also mentions RRF; a lexical retriever cannot distinguish a passage that *mentions* a term from one that *explains* it. Rank is pinned at 0.5 so a further regression still fails.",
-      "metadata": { "tags": ["known-limitation", "lexical-retrieval"] }
+      "expected": { "found_any_relevant": true },
+      "expected_behavior": "A question about RRF retrieves the RAG architecture document somewhere in the top k. Rank is deliberately not asserted against the live corpus: see the fixture_retrieval cases for rank-sensitive measurement.",
+      "metadata": { "tags": ["live-corpus"] }
     },
     {
       "id": "retrieve-chunking-strategy",
@@ -55,8 +55,9 @@
         "query": "What chunking strategy is used for documents?",
         "relevant_sources": ["docs/rag-architecture.md"]
       },
-      "expected": { "found_any_relevant": true, "top_is_relevant": true },
-      "expected_behavior": "A chunking question retrieves the RAG document."
+      "expected": { "found_any_relevant": true },
+      "expected_behavior": "A chunking question retrieves the RAG document somewhere in the top k.",
+      "metadata": { "tags": ["live-corpus"] }
     },
     {
       "id": "retrieve-agent-guardrails",
@@ -88,9 +89,9 @@
         "query": "How is P95 latency calculated?",
         "relevant_sources": ["docs/observability.md"]
       },
-      "expected": { "found_any_relevant": true, "reciprocal_rank": 0.5 },
-      "expected_behavior": "A metrics question retrieves the observability document, at document-rank 2. A design-decision entry that uses `p95_latency_ms` as an example ranks first: both chunks contain the term, and lexical scoring cannot tell which one answers the question. Rank is pinned so a further regression still fails.",
-      "metadata": { "tags": ["known-limitation", "lexical-retrieval"] }
+      "expected": { "found_any_relevant": true },
+      "expected_behavior": "A metrics question retrieves the observability document somewhere in the top k. On the live corpus a design-decision entry that uses `p95_latency_ms` as an example often ranks above it: lexical scoring cannot tell a passage that mentions a term from one that explains it. That is a real limitation, recorded in docs/rag-architecture.md.",
+      "metadata": { "tags": ["live-corpus", "known-limitation"] }
     },
     {
       "id": "retrieve-evaluation-dataset-format",
@@ -138,6 +139,72 @@
       "expected_behavior": "Both retrievers contribute candidates that fusion can combine."
     },
 
+    {
+      "id": "fixture-bm25-scoring",
+      "category": "fixture_retrieval",
+      "target": "rag_retrieval",
+      "input": {
+        "corpus": "fixture",
+        "query": "How does BM25 score a passage?",
+        "relevant_sources": ["search.md"]
+      },
+      "expected": {
+        "found_any_relevant": true,
+        "top_is_relevant": true,
+        "reciprocal_rank": 1.0,
+        "recall_at_k": 1.0
+      },
+      "expected_behavior": "Against the frozen corpus, a BM25 question ranks the search document first. Rank is assertable here because the corpus does not change.",
+      "metadata": { "tags": ["fixture-corpus"] }
+    },
+    {
+      "id": "fixture-rank-fusion",
+      "category": "fixture_retrieval",
+      "target": "rag_retrieval",
+      "input": {
+        "corpus": "fixture",
+        "query": "How do you combine two ranked lists?",
+        "relevant_sources": ["search.md"]
+      },
+      "expected": { "top_is_relevant": true, "reciprocal_rank": 1.0 },
+      "expected_behavior": "A fusion question ranks the search document first."
+    },
+    {
+      "id": "fixture-cache-invalidation",
+      "category": "fixture_retrieval",
+      "target": "rag_retrieval",
+      "input": {
+        "corpus": "fixture",
+        "query": "What invalidates a prefix cache?",
+        "relevant_sources": ["caching.md"]
+      },
+      "expected": { "top_is_relevant": true, "reciprocal_rank": 1.0, "recall_at_k": 1.0 },
+      "expected_behavior": "A caching question ranks the caching document first."
+    },
+    {
+      "id": "fixture-flaky-tests",
+      "category": "fixture_retrieval",
+      "target": "rag_retrieval",
+      "input": {
+        "corpus": "fixture",
+        "query": "What causes flaky tests?",
+        "relevant_sources": ["testing.md"]
+      },
+      "expected": { "top_is_relevant": true, "reciprocal_rank": 1.0 },
+      "expected_behavior": "A testing question ranks the testing document first."
+    },
+    {
+      "id": "fixture-canary-release",
+      "category": "fixture_retrieval",
+      "target": "rag_retrieval",
+      "input": {
+        "corpus": "fixture",
+        "query": "What is a canary release?",
+        "relevant_sources": ["deployment.md"]
+      },
+      "expected": { "top_is_relevant": true, "reciprocal_rank": 1.0 },
+      "expected_behavior": "A deployment question ranks the deployment document first."
+    },
     {
       "id": "answer-rrf-question-is-grounded",
       "category": "generation",

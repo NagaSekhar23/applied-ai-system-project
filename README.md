@@ -12,7 +12,7 @@ over game logic. Every AI feature degrades to a working deterministic path
 when the provider is unavailable.
 
 **It runs with no API key.** The default provider is a mock, so the whole
-application, its 510 tests and its 169 evaluation cases run offline, free, and
+application, its 518 tests and its 174 evaluation cases run offline, free, and
 deterministically.
 
 ---
@@ -134,8 +134,8 @@ logged, displayed, or written to a report.
 
 ```bash
 python -m streamlit run app.py     # the app
-python -m pytest                   # 510 tests, ~9s, no network
-python -m evaluation.run           # 169 evaluation cases across 5 datasets
+python -m pytest                   # 518 tests, ~15s, no network
+python -m evaluation.run           # 174 evaluation cases across 5 datasets
 python -m evaluation.run --quiet   # one line per dataset
 ```
 
@@ -144,13 +144,13 @@ python -m evaluation.run --quiet   # one line per dataset
 ### Current measured results
 
 ```
-510 passed, 1 skipped          (the skip needs the optional anthropic package)
+518 passed                     (517 + 1 skip if the optional anthropic package is absent)
 
 agent:            27/27  (100%)
 game-logic:       56/56  (100%)
 llm-assistant:    21/21  (100%)
 natural-language: 36/36  (100%)
-rag:              29/29  (100%)
+rag:              34/34  (100%)
 ```
 
 These are deterministic-correctness results measured in mock mode. They say

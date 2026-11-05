@@ -138,33 +138,54 @@ are deliberately excluded, because they vary between runs.
 Same dataset + same code ⇒ same fingerprint. A changed fingerprint means
 behavior changed. This is asserted by `test_runs_are_reproducible`.
 
-## Current dataset
+## Datasets
 
-`evaluation/datasets/game_logic.json` — 56 cases across 9 categories:
-comparison, input_validation, boundary, edge_case, scoring, difficulty,
-game_flow, game_over, error_handling.
+| Dataset | Cases | Categories | Covers |
+|---|---|---|---|
+| `game_logic.json` | 56 | 9 | comparison, input validation, boundaries, scoring, difficulty, game flow, game over, error handling |
+| `llm_assistant.json` | 21 | 4 | assistant success, fallback, safety, schema validation |
+| `natural_language.json` | 36 | 7 | intent, paraphrase, argument extraction, ambiguity, validation, execution, safe rejection |
+| `agent.json` | 27 | 5 | tool selection, multi-step, guardrails, observability, tool contracts |
+| `rag.json` | 34 | 6 | ingestion, retrieval, fixture retrieval, generation, citation validity, abstention |
+| **Total** | **174** | | |
 
-Cases tagged `regression` in metadata reproduce defects that were actually found
-and fixed in this repository.
+Cases tagged `regression` in metadata reproduce defects that were actually
+found and fixed in this repository.
+
+### Two corpora for RAG, and why
+
+RAG cases are split across two corpora:
+
+- **Live corpus** (this project's own docs) — cases assert only robust
+  properties such as "the relevant document was retrieved at all".
+- **Frozen fixture corpus** (`evaluation/fixtures/corpus/`) — cases that
+  assert on *rank* (`reciprocal_rank`, `top_is_relevant`) run here.
+
+The reason is a real failure. Retrieval rank is a property of the whole
+corpus: adding a document that mentions the same terms shifts every ranking.
+Because the live corpus is documentation that changes on most commits,
+rank assertions against it failed twice for reasons that had nothing to do
+with retrieval quality — once when the README was rewritten, once when a
+design-decision entry was added that happened to mention `p95_latency_ms`.
+
+Ground truth needs a stable substrate. `test_rank_metrics_survive_an_edit_to_the_live_corpus`
+pins the fix.
 
 ### Latest measured result
 
-Command: `python -m evaluation.run`
+Command: `python -m evaluation.run --quiet`
 
 ```
-Total cases : 56
-Passed      : 56
-Failed      : 0
-Errored     : 0
-Pass rate   : 100.0%
-Duration    : 0.001s
+agent:            27/27 passed (100.0%) fingerprint=655b6972d6fad167
+game-logic:       56/56 passed (100.0%) fingerprint=da1eb82238b4b716
+llm-assistant:    21/21 passed (100.0%) fingerprint=6283ef862900070e
+natural-language: 36/36 passed (100.0%) fingerprint=98cf1a3b40781f20
+rag:              34/34 passed (100.0%) fingerprint=058644b749685e1e
 ```
 
-Per category: boundary 7/7, comparison 8/8, difficulty 6/6, edge_case 2/2,
-error_handling 2/2, game_flow 4/4, game_over 5/5, input_validation 12/12,
-scoring 10/10.
-
-This is a deterministic-correctness result on a mock-free, API-free code path.
+These are deterministic-correctness results produced in mock mode, with no
+API key and no network. They measure whether the implementation matches the
+datasets. They do **not** measure the quality of a real model's output.
 
 ## Extending it
 
