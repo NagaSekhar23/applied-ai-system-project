@@ -16,7 +16,12 @@ MIN_WIN_POINTS = 10
 WIN_BASE_POINTS = 100
 WIN_POINTS_PER_GUESS = 10
 
-_INTEGER_PATTERN = re.compile(r"[+-]?\d+")
+_INTEGER_PATTERN = re.compile(r"[+-]?[0-9]+")
+
+# Python refuses to convert very long digit strings to int (default limit is
+# 4300 digits). Any value with more than 18 significant digits is far outside
+# every difficulty range, so it is rejected as out of range before conversion.
+_MAX_SIGNIFICANT_DIGITS = 18
 
 
 @dataclass(frozen=True)
@@ -84,9 +89,15 @@ def parse_guess(raw: str | None, low: int = 1, high: int = 100) -> ParseResult:
     if not _INTEGER_PATTERN.fullmatch(text):
         return ParseResult(False, None, "That is not a whole number.")
 
-    value = int(text)
+    out_of_range = ParseResult(False, None, f"Your guess must be between {low} and {high}.")
+    sign = -1 if text.startswith("-") else 1
+    digits = text.lstrip("+-").lstrip("0") or "0"  # leading zeros are not significant
+    if len(digits) > _MAX_SIGNIFICANT_DIGITS:
+        return out_of_range
+
+    value = sign * int(digits)
     if value < low or value > high:
-        return ParseResult(False, None, f"Your guess must be between {low} and {high}.")
+        return out_of_range
 
     return ParseResult(True, value, None)
 
