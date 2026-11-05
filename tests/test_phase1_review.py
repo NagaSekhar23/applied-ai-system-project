@@ -123,9 +123,11 @@ def test_zero_and_negative_values_are_out_of_range(raw):
 def test_changing_difficulty_mid_game_resets_score_and_attempts():
     at = AppTest.from_file(APP, default_timeout=10).run()
     _set_secret(at, 99)
-    _submit(at, "1")
+    at.session_state["game"] = replace(_game(at), score=30)
+    at.run()
+    _submit(at, "1")  # wrong guess: 30 -> 25
     assert _game(at).attempts_used == 1
-    assert _game(at).score == -5
+    assert _game(at).score == 25
 
     at.sidebar.selectbox[0].set_value("Hard").run()
     assert _game(at).difficulty == "Hard"
@@ -169,21 +171,21 @@ def test_new_game_clears_the_guess_box():
     assert at.text_input[0].value == ""
 
 
-# --- Scoring behavior currently implemented (pending owner approval) ---------
+# --- Approved scoring: wrong guesses cost 5, score never goes below zero -----
 
-def test_current_scoring_penalizes_wrong_guesses_in_both_directions():
+def test_wrong_guesses_from_zero_keep_the_score_at_zero_in_both_directions():
     at = AppTest.from_file(APP, default_timeout=10).run()
     _set_secret(at, 50)
-    _submit(at, "60")  # too high, guess 1
-    _submit(at, "40")  # too low, guess 2
-    assert _game(at).score == -10
+    _submit(at, "60")  # too high
+    _submit(at, "40")  # too low
+    assert _game(at).score == 0
 
 
-def test_current_scoring_can_go_negative_when_the_game_is_lost():
+def test_losing_with_only_wrong_guesses_ends_at_zero_not_negative():
     at = AppTest.from_file(APP, default_timeout=10).run()
     at.sidebar.selectbox[0].set_value("Hard").run()  # 5 attempts
     _set_secret(at, 25)
     for n in (1, 2, 3, 4, 5):
         _submit(at, str(n))
     assert _game(at).status == "lost"
-    assert _game(at).score == -25
+    assert _game(at).score == 0

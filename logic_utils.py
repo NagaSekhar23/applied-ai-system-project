@@ -118,7 +118,8 @@ def update_score(current_score: int, outcome: str, guess_number: int) -> int:
     """Return the new score after a guess.
 
     A win awards ``max(10, 100 - 10 * guess_number)`` points. A wrong guess
-    costs 5 points, whichever direction it was in.
+    costs 5 points, whichever direction it was in. The score never drops
+    below zero: a penalty stops at 0.
 
     Args:
         guess_number: 1-based index of this valid guess in the game.
@@ -130,5 +131,5 @@ def update_score(current_score: int, outcome: str, guess_number: int) -> int:
         points = max(MIN_WIN_POINTS, WIN_BASE_POINTS - WIN_POINTS_PER_GUESS * guess_number)
         return current_score + points
     if outcome in (OUTCOME_TOO_HIGH, OUTCOME_TOO_LOW):
-        return current_score - WRONG_GUESS_PENALTY
+        return max(0, current_score - WRONG_GUESS_PENALTY)
     raise ValueError(f"Unknown outcome {outcome!r}")

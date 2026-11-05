@@ -41,7 +41,7 @@ python -m pytest
 
 The suite covers parsing, difficulty settings, scoring, game-state transitions, and the Streamlit flow. Checks include that a guess too high gets "Go LOWER!", that invalid or out-of-range input never uses up an attempt, and that a new game after a win is playable again.
 
-Run it with `python -m pytest`. Current result: **100 passed**.
+Run it with `python -m pytest`. Current result: **106 passed**.
 
 ## 📋 Rules (current behavior)
 
@@ -49,7 +49,8 @@ Run it with `python -m pytest`. Current result: **100 passed**.
 - **Attempts:** only valid guesses count. Invalid text and out-of-range numbers are rejected with a message and do not use an attempt.
 - **Winning:** the game ends when you guess the secret. Points are `max(10, 100 − 10 × guess number)`.
 - **Losing:** the game ends after your last attempt. The secret is revealed.
-- **Wrong guesses:** each costs 5 points, whether the guess was too high or too low. Scores can go negative.
+- **Wrong guesses:** each costs 5 points, whether the guess was too high or too low. The score never drops below 0. For example, a score of 0 stays at 0, and a score of 10 becomes 5.
+- **Score example:** a score of 0 that guesses wrong, then wins on guess 3, ends with 70 points (100 − 10 × 3).
 - **Game over:** the guess box and Submit button are disabled. New Game is always available.
 
 ## 📸 Demo Walkthrough

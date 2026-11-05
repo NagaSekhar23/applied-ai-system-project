@@ -56,8 +56,23 @@ def test_wrong_guess_consumes_one_attempt_and_costs_five():
     assert result.hint == "📉 Go LOWER!"
     assert result.state.attempts_used == 1
     assert result.state.attempts_left == 7
-    assert result.state.score == -5
+    assert result.state.score == 0  # floored: starting score was already 0
     assert result.state.status == "playing"
+
+
+def test_wrong_guess_from_positive_score_subtracts_five_in_game():
+    game = replace(make_game(secret=50), score=30)
+    result = submit_guess(game, "40")
+    assert result.state.score == 25
+
+
+def test_win_after_wrong_guesses_in_game_scores_from_the_floor():
+    game = make_game(secret=50)
+    game = submit_guess(game, "60").state  # too high, floored to 0
+    game = submit_guess(game, "40").state  # too low, still 0
+    result = submit_guess(game, "50")
+    assert result.outcome == "Win"
+    assert result.state.score == 70  # 100 - 10 * 3
 
 
 def test_history_records_valid_guesses_only():
