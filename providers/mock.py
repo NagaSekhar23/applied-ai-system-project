@@ -150,11 +150,37 @@ def _agent_plan_handler(facts: dict[str, Any], user: str = "") -> dict[str, Any]
     }
 
 
+EVIDENCE_BLOCK = re.compile(r"^\[(\d+)\]\s+(.*)$", re.MULTILINE)
+
+
+def _rag_answer_handler(facts: dict[str, Any], user: str = "") -> dict[str, Any]:
+    """Answer from the first evidence passage, citing it.
+
+    Deterministic and genuinely grounded: it quotes text that really is in the
+    evidence and cites a marker that really exists, so citation validation is
+    exercised rather than bypassed. It does not comprehend the question.
+    """
+    markers = EVIDENCE_BLOCK.findall(user)
+    if not markers:
+        return {"answer": "No evidence was supplied.", "sufficient_evidence": False}
+
+    body = user.split("Evidence:", 1)[-1]
+    first = body.split("\n\n", 1)
+    excerpt = first[1].strip() if len(first) > 1 else ""
+    sentence = excerpt.split(". ")[0].strip()[:220] or "see the cited passage"
+
+    return {
+        "answer": f"According to the documentation: {sentence} [1]",
+        "sufficient_evidence": True,
+    }
+
+
 DEFAULT_HANDLERS: dict[str, Callable[..., dict[str, Any]]] = {
     "hint": _hint_handler,
     "explain_rules": _explain_handler,
     "parse_command": _parse_command_handler,
     "agent_plan": _agent_plan_handler,
+    "rag_answer": _rag_answer_handler,
 }
 
 

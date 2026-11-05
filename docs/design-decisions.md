@@ -426,3 +426,88 @@ shown in the UI.
 **Rationale.** An unbounded list in a long-lived Streamlit session is a slow
 memory leak. Showing the eviction count means the window is visible rather
 than being a silent reason the numbers look wrong.
+
+---
+
+## D29 — A lexical embedder, honestly labelled
+
+**Problem.** Anthropic does not provide an embeddings endpoint, and a trained
+embedding model means another vendor, another key, and a paid dependency for
+every test run.
+
+**Decision.** Ship `HashingEmbedder`, a hashing vectoriser over word n-grams,
+behind an `Embedder` protocol. Label it `semantic = False`, and say plainly in
+the code, docs and UI that it matches lexically, not semantically.
+
+**Alternatives.**
+- *Call it "semantic retrieval" anyway.* Rejected. It is the single easiest
+  thing to overclaim in a RAG project and the easiest for an interviewer to
+  catch.
+- *Require a paid embeddings key.* Rejected: the project must run offline.
+
+**Trade-off.** Paraphrase without word overlap will miss. That limitation is
+documented and is visible in the evaluation results rather than hidden.
+
+---
+
+## D30 — Fusion on rank (RRF), not on score
+
+**Decision.** Combine BM25 and cosine results with Reciprocal Rank Fusion,
+`k = 60`.
+
+**Rationale.** BM25 scores are unbounded and corpus-dependent; cosine is
+bounded in [0, 1]. Summing them lets the larger scale win silently, and
+min-max normalising is unstable on a handful of results. RRF uses only
+ordering, so no normalisation is needed and a chunk both retrievers liked
+beats one that only one retriever ranked first.
+
+**Trade-off.** Magnitude information is discarded — a runaway-best match
+ranked first scores the same as any other first place.
+
+---
+
+## D31 — Document-level relevance labels, stated as such
+
+**Decision.** RAG evaluation labels relevance by source document, not by
+passage.
+
+**Rationale.** Passage-level ground truth over ~100 chunks would mean hand-
+labelling every chunk against every query, and would need re-labelling each
+time the docs change. Document-level labels are maintainable and still catch
+the failure that matters most: retrieving from entirely the wrong document.
+
+**Trade-off.** Recall and precision are an *upper bound* on true passage
+relevance — a chunk from the right document about the wrong topic counts as a
+hit. The metric docstring and the architecture doc both say so.
+
+---
+
+## D32 — Abstention before generation, not after
+
+**Decision.** If no retrieved passage clears `MIN_EVIDENCE_SCORE`, abstain
+without calling the model at all.
+
+**Rationale.** Cheaper, faster, and it removes the opportunity for an
+unsupported answer entirely rather than relying on the model to decline. Two
+further gates (schema, citations) catch what gets past the first.
+
+**Trade-off.** A fixed threshold is crude and corpus-dependent. It is a named
+constant with the tuning trade-off documented: raising it trades recall for
+safety.
+
+---
+
+## D33 — The tokenizer emits identifiers *and* their parts
+
+**Problem.** `[a-z0-9_]+` made `p95_latency_ms` a single token, so the query
+"how is P95 latency calculated" matched nothing. The evaluation case
+`retrieve-observability-metrics` failed and exposed it.
+
+**Decision.** Emit the whole token and its underscore-separated parts.
+
+**Rationale.** Keeps BM25's advantage on exact identifiers (high-IDF rare
+term) while letting natural-language queries match the same chunk.
+
+**Note.** This is the clearest example in the project of evaluation earning
+its keep: the bug was invisible in unit tests, which tested the tokenizer's
+stated behavior rather than whether retrieval actually worked.

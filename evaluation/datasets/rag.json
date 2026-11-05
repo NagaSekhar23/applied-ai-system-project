@@ -1,0 +1,303 @@
+{
+  "name": "rag",
+  "version": 1,
+  "description": "Retrieval quality (Recall@K, Precision@K, MRR), citation validity, grounded-answer rate and abstention correctness for the knowledge assistant. Relevance labels are document-level, so retrieval metrics measure whether the right document was found, not the right passage. Runs offline with the mock provider and the lexical hashing embedder.",
+  "cases": [
+    {
+      "id": "ingest-metadata-is-complete",
+      "category": "ingestion",
+      "target": "rag_ingestion",
+      "input": {},
+      "expected": {
+        "chunk_count_positive": true,
+        "all_have_source": true,
+        "all_have_chunk_id": true,
+        "all_have_hash": true,
+        "all_have_timestamp": true,
+        "unique_chunk_ids": true
+      },
+      "expected_behavior": "Every chunk carries the metadata a citation needs, with unique ids."
+    },
+    {
+      "id": "ingest-excludes-blocked-paths",
+      "category": "ingestion",
+      "target": "rag_ingestion",
+      "input": {},
+      "expected": { "no_blocked_sources": true },
+      "expected_behavior": "No chunk originates from .env or the virtualenv."
+    },
+    {
+      "id": "ingest-does-not-claim-semantic-embeddings",
+      "category": "ingestion",
+      "target": "rag_ingestion",
+      "input": {},
+      "expected": { "embedder_is_semantic": false },
+      "expected_behavior": "The default embedder reports itself as non-semantic, so the UI cannot overstate it."
+    },
+
+    {
+      "id": "retrieve-rrf-explanation",
+      "category": "retrieval",
+      "target": "rag_retrieval",
+      "input": {
+        "query": "What does reciprocal rank fusion do?",
+        "relevant_sources": ["docs/rag-architecture.md"]
+      },
+      "expected": { "found_any_relevant": true, "top_is_relevant": true, "reciprocal_rank": 1.0 },
+      "expected_behavior": "A question about RRF retrieves the RAG architecture document first."
+    },
+    {
+      "id": "retrieve-chunking-strategy",
+      "category": "retrieval",
+      "target": "rag_retrieval",
+      "input": {
+        "query": "What chunking strategy is used for documents?",
+        "relevant_sources": ["docs/rag-architecture.md"]
+      },
+      "expected": { "found_any_relevant": true, "top_is_relevant": true },
+      "expected_behavior": "A chunking question retrieves the RAG document."
+    },
+    {
+      "id": "retrieve-agent-guardrails",
+      "category": "retrieval",
+      "target": "rag_retrieval",
+      "input": {
+        "query": "How is the agent execution loop bounded and prevented from looping forever?",
+        "relevant_sources": ["docs/agent-architecture.md", "docs/design-decisions.md"]
+      },
+      "expected": { "found_any_relevant": true },
+      "expected_behavior": "A guardrails question retrieves agent documentation."
+    },
+    {
+      "id": "retrieve-exact-technical-term",
+      "category": "retrieval",
+      "target": "rag_retrieval",
+      "input": {
+        "query": "GAME_DEBUG environment variable",
+        "relevant_sources": ["docs/architecture.md", "README.md"]
+      },
+      "expected": { "found_any_relevant": true },
+      "expected_behavior": "An exact identifier is found — this is BM25's strength in the hybrid."
+    },
+    {
+      "id": "retrieve-observability-metrics",
+      "category": "retrieval",
+      "target": "rag_retrieval",
+      "input": {
+        "query": "How is P95 latency calculated?",
+        "relevant_sources": ["docs/observability.md"]
+      },
+      "expected": { "found_any_relevant": true, "top_is_relevant": true },
+      "expected_behavior": "A metrics question retrieves the observability document."
+    },
+    {
+      "id": "retrieve-evaluation-dataset-format",
+      "category": "retrieval",
+      "target": "rag_retrieval",
+      "input": {
+        "query": "What fields does an evaluation case contain?",
+        "relevant_sources": ["docs/evaluation.md"]
+      },
+      "expected": { "found_any_relevant": true },
+      "expected_behavior": "An evaluation question retrieves the evaluation document."
+    },
+    {
+      "id": "retrieve-scoring-rules",
+      "category": "retrieval",
+      "target": "rag_retrieval",
+      "input": {
+        "query": "How many points do you get for winning?",
+        "relevant_sources": ["README.md", "docs/architecture.md"]
+      },
+      "expected": { "found_any_relevant": true },
+      "expected_behavior": "A game-rules question retrieves the README or architecture doc."
+    },
+    {
+      "id": "retrieve-returns-ranked-evidence",
+      "category": "retrieval",
+      "target": "rag_retrieval",
+      "input": {
+        "query": "citation validation",
+        "relevant_sources": ["docs/rag-architecture.md"],
+        "k": 4
+      },
+      "expected": { "found_any_relevant": true, "evidence_count": 4 },
+      "expected_behavior": "Retrieval returns the requested number of evidence passages."
+    },
+    {
+      "id": "retrieve-hybrid-agreement-happens",
+      "category": "retrieval",
+      "target": "rag_retrieval",
+      "input": {
+        "query": "reciprocal rank fusion hybrid retrieval",
+        "relevant_sources": ["docs/rag-architecture.md"]
+      },
+      "expected": { "found_any_relevant": true },
+      "expected_behavior": "Both retrievers contribute candidates that fusion can combine."
+    },
+
+    {
+      "id": "answer-rrf-question-is-grounded",
+      "category": "generation",
+      "target": "rag_answer",
+      "input": { "question": "What does reciprocal rank fusion do?" },
+      "expected": {
+        "abstained": false,
+        "grounded": true,
+        "citations_valid": true,
+        "invalid_citation_count": 0
+      },
+      "expected_behavior": "An answerable question produces a cited, verified answer."
+    },
+    {
+      "id": "answer-chunking-question-is-grounded",
+      "category": "generation",
+      "target": "rag_answer",
+      "input": { "question": "What chunking strategy is used?" },
+      "expected": { "abstained": false, "grounded": true, "citation_count": 1 },
+      "expected_behavior": "The answer cites the evidence it used."
+    },
+    {
+      "id": "answer-cites-only-retrieved-sources",
+      "category": "generation",
+      "target": "rag_answer",
+      "input": { "question": "How is the agent loop bounded?" },
+      "expected": { "grounded": true, "citations_valid": true },
+      "expected_behavior": "Every citation resolves to a chunk that was actually retrieved."
+    },
+
+    {
+      "id": "abstain-on-off-topic-question",
+      "category": "abstention",
+      "target": "rag_answer",
+      "input": { "question": "What is the capital of France?" },
+      "expected": { "abstained": true, "grounded": false, "has_reason": true },
+      "expected_behavior": "A question the corpus cannot answer is declined, with a reason."
+    },
+    {
+      "id": "abstain-on-unsupported-topic",
+      "category": "abstention",
+      "target": "rag_answer",
+      "input": { "question": "How do I deploy this to Kubernetes with Helm charts?" },
+      "expected": { "abstained": true, "grounded": false },
+      "expected_behavior": "A plausible but undocumented topic is declined rather than invented."
+    },
+    {
+      "id": "abstain-keeps-a-usable-message",
+      "category": "abstention",
+      "target": "rag_answer",
+      "input": { "question": "What is the capital of France?" },
+      "expected": { "answer_is_non_empty": true, "source": "abstain" },
+      "expected_behavior": "An abstention still returns a helpful message."
+    },
+    {
+      "id": "abstain-when-no-generator-configured",
+      "category": "abstention",
+      "target": "rag_answer",
+      "input": { "question": "What does reciprocal rank fusion do?", "provider": "none" },
+      "expected": { "abstained": true, "has_reason": true },
+      "expected_behavior": "With no LLM client, the system abstains instead of guessing."
+    },
+    {
+      "id": "abstain-when-the-model-reports-insufficient-evidence",
+      "category": "abstention",
+      "target": "rag_answer",
+      "input": {
+        "question": "What does reciprocal rank fusion do?",
+        "provider": "scripted",
+        "script": ["{\"answer\": \"I cannot tell from this.\", \"sufficient_evidence\": false}"]
+      },
+      "expected": { "abstained": true, "grounded": false },
+      "expected_behavior": "The model's own insufficiency judgement is honoured."
+    },
+    {
+      "id": "abstain-on-malformed-generation",
+      "category": "abstention",
+      "target": "rag_answer",
+      "input": {
+        "question": "What does reciprocal rank fusion do?",
+        "provider": "scripted",
+        "script": ["this is not json"]
+      },
+      "expected": { "abstained": true, "has_reason": true },
+      "expected_behavior": "Unparseable generation abstains rather than showing raw output."
+    },
+
+    {
+      "id": "reject-fabricated-citation",
+      "category": "citation_validity",
+      "target": "rag_answer",
+      "input": {
+        "question": "What does reciprocal rank fusion do?",
+        "provider": "scripted",
+        "script": [
+          "{\"answer\": \"It fuses rankings [9].\", \"sufficient_evidence\": true}"
+        ]
+      },
+      "expected": { "abstained": true, "grounded": false },
+      "expected_behavior": "An answer citing a passage that was never retrieved is rejected, not footnoted."
+    },
+    {
+      "id": "reject-uncited-answer",
+      "category": "citation_validity",
+      "target": "rag_answer",
+      "input": {
+        "question": "What does reciprocal rank fusion do?",
+        "provider": "scripted",
+        "script": [
+          "{\"answer\": \"It combines rankings somehow.\", \"sufficient_evidence\": true}"
+        ]
+      },
+      "expected": { "abstained": true, "grounded": false },
+      "expected_behavior": "An answer with no citation at all is rejected."
+    },
+    {
+      "id": "citation-valid-single-marker",
+      "category": "citation_validity",
+      "target": "citation_validation",
+      "input": { "answer": "The loop is bounded [1].", "evidence_count": 3 },
+      "expected": { "valid": true, "citation_count": 1, "invalid_markers": [] },
+      "expected_behavior": "A marker within range validates."
+    },
+    {
+      "id": "citation-valid-multiple-markers",
+      "category": "citation_validity",
+      "target": "citation_validation",
+      "input": { "answer": "Bounded [1] and timed out [2].", "evidence_count": 3 },
+      "expected": { "valid": true, "citation_count": 2 },
+      "expected_behavior": "Several distinct markers all validate."
+    },
+    {
+      "id": "citation-out-of-range-is-invalid",
+      "category": "citation_validity",
+      "target": "citation_validation",
+      "input": { "answer": "As described [7].", "evidence_count": 3 },
+      "expected": { "valid": false, "invalid_markers": [7] },
+      "expected_behavior": "A marker beyond the evidence list is reported as invalid."
+    },
+    {
+      "id": "citation-mixed-valid-and-invalid",
+      "category": "citation_validity",
+      "target": "citation_validation",
+      "input": { "answer": "Bounded [1] and also [9].", "evidence_count": 3 },
+      "expected": { "valid": false, "citation_count": 1, "invalid_markers": [9] },
+      "expected_behavior": "One bad marker invalidates the answer even when another is good."
+    },
+    {
+      "id": "citation-absent-is-flagged",
+      "category": "citation_validity",
+      "target": "citation_validation",
+      "input": { "answer": "No citations at all here.", "evidence_count": 3 },
+      "expected": { "valid": false, "uncited": true, "citation_count": 0 },
+      "expected_behavior": "An uncited answer is distinguished from one with bad citations."
+    },
+    {
+      "id": "citation-duplicates-counted-once",
+      "category": "citation_validity",
+      "target": "citation_validation",
+      "input": { "answer": "Bounded [1], and again [1].", "evidence_count": 2 },
+      "expected": { "valid": true, "citation_count": 1 },
+      "expected_behavior": "A repeated marker is one citation, not two."
+    }
+  ]
+}

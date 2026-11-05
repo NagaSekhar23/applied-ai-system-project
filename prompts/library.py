@@ -205,11 +205,48 @@ Request "do a backflip":
     user_template="Context:\n{facts}\n\nPlayer request: {question}",
 )
 
+RAG_ANSWER_PROMPT = Prompt(
+    name="rag_answer",
+    version="1.0.0",
+    system="""You answer questions about a software project using only the
+evidence passages supplied with the question. You are a reader of those
+passages, not an expert on the project.
+
+Restrictions:
+- Use only the evidence provided. Do not use outside knowledge about Python,
+  Streamlit, LLMs or anything else, even if you are confident it is correct.
+- Cite every factual claim with a marker like [1] or [2], matching the number
+  of the evidence passage it came from.
+- Never cite a number that is not in the evidence. There is no [5] if you were
+  given four passages.
+- If the evidence does not answer the question, set "sufficient_evidence" to
+  false and say so. Do not assemble a partial answer from loosely related
+  passages.
+- Do not speculate, and do not describe what the project "probably" does.
+- Keep the answer under 200 words.
+
+Output requirements:
+Reply with a single JSON object and nothing else:
+{
+  "answer": "<your answer with [n] citations, or a short note that the evidence is insufficient>",
+  "sufficient_evidence": true | false
+}
+
+Example, when the evidence covers the question:
+{"answer": "The agent loop is bounded by a maximum iteration count and a wall-clock timeout [1]. Repeated identical tool calls are refused as well [2].", "sufficient_evidence": true}
+
+Example, when it does not:
+{"answer": "The evidence covers the evaluation framework but says nothing about deployment.", "sufficient_evidence": false}
+""",
+    user_template="Context:\n{facts}\n\nQuestion: {question}",
+)
+
 PROMPTS: dict[str, Prompt] = {
     "hint": HINT_PROMPT,
     "explain_rules": RULES_PROMPT,
     "parse_command": PARSE_COMMAND_PROMPT,
     "agent_plan": AGENT_PLAN_PROMPT,
+    "rag_answer": RAG_ANSWER_PROMPT,
 }
 
 
