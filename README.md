@@ -1,82 +1,219 @@
-# 🎮 Game Glitch Investigator: The Impossible Guesser
+# 🎮 Applied AI Engineering System
 
-A number-guessing game built with Streamlit. The starter app was AI-generated and contained several bugs. This project documents how those bugs were investigated and fixed, how the core guessing logic was refactored into its own module, and how it was tested.
+A deterministic number-guessing game with an AI layer built around it — an
+assistant, a natural-language interface, a tool-using agent, a knowledge
+assistant over the project's own docs, an evaluation framework and an
+observability dashboard.
 
-## 🛠️ Setup
+**The organising idea:** deterministic Python decides everything that matters;
+the LLM interprets language and explains results. The model never decides
+whether a guess is correct, never mutates state, and never has the last word
+over game logic. Every AI feature degrades to a working deterministic path
+when the provider is unavailable.
 
-1. Install application dependencies: `pip install -r requirements.txt`
-2. For development and testing, also install: `pip install -r requirements-dev.txt`
-3. Run the app: `python -m streamlit run app.py`
+**It runs with no API key.** The default provider is a mock, so the whole
+application, its 510 tests and its 169 evaluation cases run offline, free, and
+deterministically.
 
-### Configuration
+---
 
-| Variable | Default | Effect |
+## Quick start
+
+```bash
+pip install -r requirements.txt
+python -m streamlit run app.py
+```
+
+That's it — mock mode needs no configuration. For a real model:
+
+```bash
+cp .env.example .env          # then add your key
+export LLM_PROVIDER=anthropic
+export ANTHROPIC_API_KEY=sk-ant-...
+python -m streamlit run app.py
+```
+
+---
+
+## What it does
+
+| Page | What it demonstrates |
+|---|---|
+| **Game** | The deterministic core: pure rules, frozen state, validated input |
+| **AI Assistant** | Structured LLM output, validation, fallback, a secret the model never sees |
+| **Natural Language** | Intent → typed command → validation → execution, with each stage shown |
+| **Agent** | A bounded tool-calling loop over a closed registry, with its trace |
+| **Knowledge Assistant** | Hybrid RAG over the project docs, with verified citations and abstention |
+| **Observability** | Real recorded metrics: latency, retries, tool usage, cost (when honest) |
+
+---
+
+## Architecture
+
+```
+                      Streamlit UI (ui/)
+                            │
+      ┌─────────────────────┼─────────────────────┐
+      │                     │                     │
+  assistant.py      natural_language/          agents/
+  explain only      parse→validate→execute     bounded tool loop
+      │                     │                     │
+      └─────────────────────┼─────────────────────┘
+                            │ validated calls only
+              ┌─────────────▼──────────────┐
+              │   DETERMINISTIC CORE       │
+              │   game.py, logic_utils.py  │  ← source of truth
+              └────────────────────────────┘
+
+  providers/      vendor-neutral LLM interface + mock + retries
+  retrieval/      ingest → chunk → hybrid search → rerank → cited answer
+  evaluation/     dataset-driven measurement with a CLI
+  observability/  structured events, metrics, redaction (one-way dependency)
+```
+
+Full detail: [docs/architecture.md](docs/architecture.md).
+
+### The boundary, concretely
+
+```python
+# assistant.py — the LLM proposes, deterministic code disposes
+outcome, hint = check_guess(guess, secret)       # Python decides
+
+if leaks_secret(model_message, state):           # model disclosed the answer?
+    return fallback(...)                         # suppress it
+if model_category != true_category:              # model disagreed on outcome?
+    category = true_category                     # Python wins, disagreement logged
+```
+
+The secret is **structurally** unavailable to the model: `build_facts` omits it
+entirely while a game is in progress, so no prompt can leak a value it never
+received.
+
+---
+
+## Technology
+
+| | |
+|---|---|
+| Language | Python 3.12 |
+| UI | Streamlit |
+| Validation | Pydantic v2 |
+| LLM | Anthropic (optional) behind a provider interface; mock by default |
+| Retrieval | BM25 + hashing vectoriser + Reciprocal Rank Fusion — no vector DB |
+| Testing | pytest, including Streamlit `AppTest` |
+
+Four runtime dependencies. No LangChain, no vector database, no agent
+framework — the point is to show the mechanics, not to configure someone
+else's.
+
+---
+
+## Configuration
+
+Every variable is optional. With none set, the app runs in mock mode.
+
+| Variable | Default | Purpose |
 |---|---|---|
-| `GAME_DEBUG` | unset | Set to `true` to show the Developer Debug Info panel (secret, attempts, score, history). Hidden otherwise. |
+| `LLM_PROVIDER` | `mock` | `mock` or `anthropic` |
+| `LLM_MODEL` | `claude-opus-5-5` | Model id |
+| `ANTHROPIC_API_KEY` | — | Required only for `anthropic` |
+| `LLM_TIMEOUT_SECONDS` | `20` | Per-request timeout |
+| `LLM_MAX_RETRIES` | `2` | Bounded retries |
+| `LLM_MAX_TOKENS` | `1024` | Output cap |
+| `LLM_EFFORT` | `low` | `low`…`max` |
+| `LLM_PRICE_INPUT_PER_MTOK` | — | Enables cost estimates for an unlisted model |
+| `LLM_PRICE_OUTPUT_PER_MTOK` | — | As above |
+| `GAME_DEBUG` | unset | `true` reveals the debug panel (and the secret) |
 
-### Running the tests
+See [`.env.example`](.env.example). `.env` is git-ignored; no key is ever
+logged, displayed, or written to a report.
+
+---
+
+## Running things
 
 ```bash
-python -m pytest
+python -m streamlit run app.py     # the app
+python -m pytest                   # 510 tests, ~9s, no network
+python -m evaluation.run           # 169 evaluation cases across 5 datasets
+python -m evaluation.run --quiet   # one line per dataset
 ```
 
-### Running the evaluation suite
+`evaluation.run` exits non-zero when a case fails, so it works as a CI gate.
 
-```bash
-python -m evaluation.run
+### Current measured results
+
+```
+510 passed, 1 skipped          (the skip needs the optional anthropic package)
+
+agent:            27/27  (100%)
+game-logic:       56/56  (100%)
+llm-assistant:    21/21  (100%)
+natural-language: 36/36  (100%)
+rag:              29/29  (100%)
 ```
 
-Exits non-zero if any case fails, so it works as a CI gate. See
-[docs/evaluation.md](docs/evaluation.md).
+These are deterministic-correctness results measured in mock mode. They say
+the plumbing is right; they do not measure the phrasing quality of a real
+model. See [docs/evaluation.md](docs/evaluation.md) for what each metric
+can and cannot tell you.
 
-## 🏗️ Architecture
+---
 
-- `logic_utils.py`: pure rules (difficulty settings, input parsing, `check_guess`, scoring). No Streamlit imports.
-- `game.py`: `GameState` (a frozen dataclass) and the transitions `new_game` and `submit_guess`.
-- `app.py`: Streamlit UI only. It reads widgets, calls `game.py`, and renders results.
-- `evaluation/`: dataset-driven evaluation framework (cases, executors, runner, metrics, reports, CLI).
-- `tests/`: unit tests per module, plus `test_app_flow.py` and `test_regressions.py`, which run the app through Streamlit's `AppTest`.
-- `docs/`: [architecture](docs/architecture.md), [design decisions](docs/design-decisions.md), [evaluation](docs/evaluation.md).
+## Game rules
 
-## 🐞 Bugs Investigated and Fixed
+- **Difficulty:** Easy 1–20 / 6 attempts · Normal 1–100 / 8 · Hard 1–50 / 5.
+  Changing difficulty starts a fresh game.
+- **Attempts:** only valid guesses count. Invalid or out-of-range input is
+  rejected with a message and costs nothing.
+- **Winning:** `max(10, 100 − 10 × guess number)` points.
+- **Wrong guess:** −5, floored at 0.
+- **Game over:** the input is disabled; New Game stays available.
 
-- **Reversed hint messages:** `check_guess()` told the player to "Go HIGHER!" when the guess was too high and "Go LOWER!" when it was too low. The hints now match the outcome.
-- **New Game did not reset the score:** clicking "New Game" reset attempts but kept the old score. The score now resets to its initial value.
-- **Incorrect submit button call:** the submit button used `st.menu_button`, which raised a `TypeError`. It was corrected to `st.button`.
+---
 
-## 🔧 Refactoring
+## Documentation
 
-`check_guess()` was moved from `app.py` into `logic_utils.py`, and `app.py` now imports it from there. Its return structure, `(outcome, message)`, is unchanged.
+| Document | Contents |
+|---|---|
+| [architecture.md](docs/architecture.md) | Components, data flow, the deterministic boundary |
+| [design-decisions.md](docs/design-decisions.md) | 33 decisions with alternatives and trade-offs |
+| [evaluation.md](docs/evaluation.md) | Dataset format, metrics, reproducibility |
+| [agent-architecture.md](docs/agent-architecture.md) | Tool registry, the loop, guardrails |
+| [rag-architecture.md](docs/rag-architecture.md) | Ingestion, hybrid retrieval, RRF, citations |
+| [observability.md](docs/observability.md) | Events, metric formulas, privacy controls |
+| [security.md](docs/security.md) | Threat model and controls |
+| [interview-preparation.md](docs/interview-preparation.md) | 20 topics with sample answers |
 
-## ✅ Testing
+---
 
-The suite covers parsing, difficulty settings, scoring, game-state transitions, and the Streamlit flow. Checks include that a guess too high gets "Go LOWER!", that invalid or out-of-range input never uses up an attempt, and that a new game after a win is playable again.
+## Known limitations
 
-Run it with `python -m pytest`. Current result: **149 passed**.
+Stated plainly, because a portfolio project that hides its limits is less
+convincing than one that names them.
 
-## 📋 Rules (current behavior)
+- **The default embedder is lexical, not semantic.** `HashingEmbedder` matches
+  word overlap. A paraphrase sharing no vocabulary will miss. The `Embedder`
+  protocol exists so a trained model can replace it.
+- **The reranker is heuristic, not a trained cross-encoder.**
+- **RAG relevance labels are document-level**, so Recall@K and Precision@K are
+  an upper bound on true passage relevance.
+- **Mock mode cannot measure answer quality.** It exercises validation,
+  fallback and citation checking; it says nothing about phrasing.
+- **Observability is in-process.** A bounded deque plus optional JSONL — no
+  time-series database, no alerting, no cross-process aggregation.
+- **Cost figures are estimates** from a dated price table, and are shown only
+  when they can be computed honestly. Unpriced calls are reported, not guessed.
+- **The corpus is six documents.** RAG metrics on a corpus this small
+  demonstrate method, not stable measurement.
+- **No persistence.** Game state, events and the index live in memory.
+- **No authentication or multi-user support.** It is a local demo.
 
-- **Difficulty:** Easy 1–20 with 6 attempts, Normal 1–100 with 8 attempts, Hard 1–50 with 5 attempts. Changing difficulty starts a new game.
-- **Attempts:** only valid guesses count. Invalid text and out-of-range numbers are rejected with a message and do not use an attempt.
-- **Winning:** the game ends when you guess the secret. Points are `max(10, 100 − 10 × guess number)`.
-- **Losing:** the game ends after your last attempt. The secret is revealed.
-- **Wrong guesses:** each costs 5 points, whether the guess was too high or too low. The score never drops below 0. For example, a score of 0 stays at 0, and a score of 10 becomes 5.
-- **Score example:** a score of 0 that guesses wrong, then wins on guess 3, ends with 70 points (100 − 10 × 3).
-- **Game over:** the guess box and Submit button are disabled. New Game is always available.
+## Possible next steps
 
-## 📸 Demo Walkthrough
-
-1. Start the app with `python -m streamlit run app.py`.
-2. With `GAME_DEBUG=true` set, expand **Developer Debug Info** to see the secret number, attempts, and score.
-3. Enter a guess in the text box and click **Submit Guess 🚀**.
-4. Verify the hint: a guess above the secret should show "Go LOWER!", and a guess below it should show "Go HIGHER!".
-5. Click **New Game 🔁** and check **Developer Debug Info** again: attempts used and score are back to 0.
-
-## 📝 Documentation
-
-- `reflection.md` contains the investigation and reflection.
-- `ai_interactions.md` documents the AI-assisted debugging and refactoring.
-
-## 🔀 Git
-
-The project was committed and pushed to GitHub.
+- Swap `HashingEmbedder` for a trained embedding model and re-measure
+  Recall@K — the interface is already in place.
+- Add an LLM-as-judge evaluation for hint quality, reported under
+  `MetricKind.MODEL_QUALITY` so it is never mixed with correctness.
+- Persist events to SQLite for metrics across restarts.
+- Run the evaluation suite in CI on every push.

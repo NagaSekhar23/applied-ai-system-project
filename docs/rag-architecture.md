@@ -61,6 +61,11 @@ Each chunk carries `chunk_id`, `doc_id`, `source_path`, `section`,
 The default embedder, `HashingEmbedder`, is a **hashing vectoriser over word
 unigrams and bigrams**, L2-normalised and compared with cosine similarity.
 
+Stopwords are removed before embedding. In a count-based vector, function
+words like "what", "is" and "for" are frequent enough to dominate the cosine
+similarity, so a chunk of ordinary prose outranks the chunk that answers the
+question. They are kept for BM25, where IDF already discounts them.
+
 It is **not a trained semantic model**, and the code does not call it one. It
 cannot match "how do I stop the model inventing sources?" to a passage about
 "citation validation" unless the words overlap. What it does provide is a real
@@ -178,6 +183,16 @@ tracker, under the `retrieval` component.
 
 - The default embedder is lexical, not semantic. Paraphrase without word
   overlap will miss.
+- **Lexical scoring cannot distinguish "mentions" from "explains".** Two
+  evaluation cases record this: a query about Reciprocal Rank Fusion ranks the
+  README (which mentions it once) above the RAG document (which explains it),
+  and a query about P95 latency ranks a design-decision entry that uses
+  `p95_latency_ms` as an example above the document defining the formula. In
+  both cases the right document is still retrieved, at document-rank 2, so the
+  generator sees it. The cases are tagged `known-limitation` and pin the
+  current rank, so a further regression still fails. A trained embedding model
+  is the fix; weight-tuning the heuristic reranker to pass these two queries
+  would be overfitting to the test set.
 - The heuristic reranker is not a trained cross-encoder.
 - Relevance labels are document-level, not passage-level.
 - The corpus is six documents. Metrics on a corpus this small are

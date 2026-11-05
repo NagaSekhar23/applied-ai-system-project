@@ -32,6 +32,19 @@ from retrieval.chunking import Chunk
 TOKEN = re.compile(r"[a-z0-9_]+")
 DEFAULT_DIMENSIONS = 2048
 
+# Function words carry no topical signal but are extremely frequent, so in a
+# count-based vector they dominate the cosine similarity: a chunk of ordinary
+# prose outranks the chunk that actually answers the question. Removing them
+# before embedding is standard practice in lexical retrieval.
+#
+# They are kept for BM25, where IDF already discounts them, and dropping a
+# term there would lose the ability to match a literal phrase.
+STOPWORDS = frozenset(
+    """a an and are as at be been but by can could do does for from had has have
+    how i if in into is it its of on or should that the their then there these
+    this to was were what when where which who why will with would you your""".split()
+)
+
 
 def tokenize(text: str) -> list[str]:
     """Lowercase word tokens, shared by every retriever for consistency.
@@ -92,9 +105,13 @@ class HashingEmbedder:
         return int.from_bytes(digest[:4], "big") % self.dimensions
 
     def embed(self, text: str) -> dict[int, float]:
-        """L2-normalised sparse vector of hashed n-gram counts."""
+        """L2-normalised sparse vector of hashed n-gram counts.
+
+        Stopwords are removed first; see ``STOPWORDS`` for why.
+        """
+        content = [token for token in tokenize(text) if token not in STOPWORDS]
         counts: dict[int, float] = {}
-        for term in ngrams(tokenize(text), self.sizes):
+        for term in ngrams(content, self.sizes):
             index = self._bucket(term)
             counts[index] = counts.get(index, 0.0) + 1.0
 

@@ -25,13 +25,8 @@ import re
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
-from retrieval.embeddings import tokenize
+from retrieval.embeddings import STOPWORDS, tokenize
 from retrieval.hybrid import FusedChunk
-
-STOPWORDS = frozenset(
-    """a an and are as at be but by do does for from how i if in is it its of on or
-    that the this to was what when where which who why with you your""".split()
-)
 
 
 @dataclass
