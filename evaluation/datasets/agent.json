@@ -1,0 +1,332 @@
+{
+  "name": "agent",
+  "version": 1,
+  "description": "Tool selection, argument validity, execution success, unnecessary-call rate, multi-step completion and guardrail behaviour for the controlled agent. Runs against the deterministic rule-based planner and mock provider, so no API key is needed. It measures orchestration correctness, not how well a real model plans.",
+  "cases": [
+    {
+      "id": "select-status-tool",
+      "category": "tool_selection",
+      "target": "agent_run",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": { "message": "what is my status", "expected_tools": ["get_game_status"] },
+      "expected": {
+        "tools_called": ["get_game_status"],
+        "succeeded": true,
+        "unnecessary_tool_calls": 0,
+        "all_tools_registered": true
+      },
+      "expected_behavior": "A status question selects exactly the status tool."
+    },
+    {
+      "id": "select-hint-tool",
+      "category": "tool_selection",
+      "target": "agent_run",
+      "initial_state": { "difficulty": "Normal", "secret": 50, "attempts_used": 1 },
+      "input": { "message": "give me a hint", "last_outcome": "Too High", "expected_tools": ["request_hint"] },
+      "expected": { "tools_called": ["request_hint"], "succeeded": true, "unnecessary_tool_calls": 0 },
+      "expected_behavior": "A hint request selects the hint tool and nothing else."
+    },
+    {
+      "id": "select-guess-tool",
+      "category": "tool_selection",
+      "target": "agent_run",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": { "message": "guess 60", "expected_tools": ["submit_guess"] },
+      "expected": { "tools_called": ["submit_guess"], "succeeded": true, "attempts_used": 1 },
+      "expected_behavior": "A guess selects the guess tool and advances the game."
+    },
+    {
+      "id": "select-start-tool-with-difficulty",
+      "category": "tool_selection",
+      "target": "agent_run",
+      "initial_state": { "game_in_progress": false },
+      "input": { "message": "start a hard game", "expected_tools": ["start_game"] },
+      "expected": {
+        "tools_called": ["start_game"],
+        "difficulty": "Hard",
+        "succeeded": true,
+        "attempts_used": 0
+      },
+      "expected_behavior": "Starting a game extracts the difficulty argument."
+    },
+    {
+      "id": "select-rules-tool",
+      "category": "tool_selection",
+      "target": "agent_run",
+      "initial_state": { "difficulty": "Hard", "secret": 25 },
+      "input": { "message": "explain the rules", "expected_tools": ["explain_rules"] },
+      "expected": { "tools_called": ["explain_rules"], "succeeded": true, "mutated_state": false },
+      "expected_behavior": "Explaining the rules is read-only."
+    },
+    {
+      "id": "select-reset-tool",
+      "category": "tool_selection",
+      "target": "agent_run",
+      "initial_state": { "difficulty": "Normal", "secret": 50, "attempts_used": 4, "score": 30 },
+      "input": { "message": "reset the game", "expected_tools": ["reset_game"] },
+      "expected": { "tools_called": ["reset_game"], "attempts_used": 0, "score": 0 },
+      "expected_behavior": "Reset clears progress."
+    },
+    {
+      "id": "select-difficulty-tool",
+      "category": "tool_selection",
+      "target": "agent_run",
+      "initial_state": { "difficulty": "Normal", "secret": 50, "attempts_used": 2 },
+      "input": { "message": "change difficulty to easy", "expected_tools": ["change_difficulty"] },
+      "expected": { "tools_called": ["change_difficulty"], "difficulty": "Easy", "attempts_used": 0 },
+      "expected_behavior": "Changing difficulty starts a fresh game at that level."
+    },
+
+    {
+      "id": "multistep-start-and-explain",
+      "category": "multi_step",
+      "target": "agent_run",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": {
+        "message": "start a hard game and explain the rules",
+        "expected_tools": ["start_game", "explain_rules"]
+      },
+      "expected": {
+        "tools_called": ["start_game", "explain_rules"],
+        "succeeded": true,
+        "iterations": 3,
+        "difficulty": "Hard",
+        "unnecessary_tool_calls": 0
+      },
+      "expected_behavior": "A two-step request runs both tools, then responds, in three iterations."
+    },
+    {
+      "id": "multistep-does-not-repeat-tools",
+      "category": "multi_step",
+      "target": "agent_run",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": {
+        "message": "start a new game and tell me the rules",
+        "expected_tools": ["start_game", "explain_rules"]
+      },
+      "expected": { "tool_count": 2, "stop_reason": "responded" },
+      "expected_behavior": "Each tool is called at most once per request."
+    },
+    {
+      "id": "multistep-terminates",
+      "category": "multi_step",
+      "target": "agent_run",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": {
+        "message": "start a hard game and explain the rules",
+        "expected_tools": ["start_game", "explain_rules"]
+      },
+      "expected": { "succeeded": true, "stop_reason": "responded" },
+      "expected_behavior": "A multi-step run terminates by responding, not by hitting a limit."
+    },
+
+    {
+      "id": "guard-unsupported-request-calls-nothing",
+      "category": "guardrails",
+      "target": "agent_run",
+      "initial_state": { "difficulty": "Normal", "secret": 50, "attempts_used": 2 },
+      "input": { "message": "delete all my files", "expected_tools": [] },
+      "expected": {
+        "tools_called": [],
+        "stop_reason": "clarification",
+        "attempts_used": 2,
+        "mutated_state": false
+      },
+      "expected_behavior": "An unsupported request runs no tool and changes nothing."
+    },
+    {
+      "id": "guard-no-guess-after-game-over",
+      "category": "guardrails",
+      "target": "agent_run",
+      "initial_state": { "difficulty": "Normal", "secret": 50, "status": "won", "attempts_used": 1 },
+      "input": { "message": "guess 42" },
+      "expected": { "attempts_used": 1, "failed_tool_calls": 1 },
+      "expected_behavior": "A finished game cannot be advanced; the tool call fails safely."
+    },
+    {
+      "id": "guard-out-of-range-guess-rejected",
+      "category": "guardrails",
+      "target": "agent_run",
+      "initial_state": { "difficulty": "Hard", "secret": 25 },
+      "input": { "message": "guess 999" },
+      "expected": { "attempts_used": 0, "failed_tool_calls": 1 },
+      "expected_behavior": "The agent cannot bypass the game's range validation."
+    },
+    {
+      "id": "guard-does-not-start-a-game-unprompted",
+      "category": "guardrails",
+      "target": "agent_run",
+      "initial_state": { "difficulty": "Normal", "secret": 50, "attempts_used": 3, "score": 10 },
+      "input": { "message": "what is my score", "expected_tools": ["get_game_status"] },
+      "expected": { "tools_called": ["get_game_status"], "attempts_used": 3, "score": 10 },
+      "expected_behavior": "A read-only question never discards the player's progress."
+    },
+    {
+      "id": "guard-iteration-limit-terminates",
+      "category": "guardrails",
+      "target": "agent_run",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": {
+        "provider": "scripted",
+        "max_retries": 0,
+        "allow_repeat_calls": true,
+        "max_iterations": 3,
+        "message": "loop forever",
+        "script": [
+          "{\"action\": \"call_tool\", \"tool\": \"get_game_status\", \"arguments\": {}, \"response\": null, \"reasoning\": \"again\"}",
+          "{\"action\": \"call_tool\", \"tool\": \"get_game_status\", \"arguments\": {}, \"response\": null, \"reasoning\": \"again\"}",
+          "{\"action\": \"call_tool\", \"tool\": \"get_game_status\", \"arguments\": {}, \"response\": null, \"reasoning\": \"again\"}",
+          "{\"action\": \"call_tool\", \"tool\": \"get_game_status\", \"arguments\": {}, \"response\": null, \"reasoning\": \"again\"}"
+        ]
+      },
+      "expected": { "stop_reason": "max_iterations", "iterations": 3, "succeeded": false },
+      "expected_behavior": "A planner that never stops is terminated by the iteration ceiling."
+    },
+    {
+      "id": "guard-repeated-call-protection",
+      "category": "guardrails",
+      "target": "agent_run",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": {
+        "provider": "scripted",
+        "max_retries": 0,
+        "max_iterations": 5,
+        "message": "status repeatedly",
+        "script": [
+          "{\"action\": \"call_tool\", \"tool\": \"get_game_status\", \"arguments\": {}, \"response\": null, \"reasoning\": \"again\"}",
+          "{\"action\": \"call_tool\", \"tool\": \"get_game_status\", \"arguments\": {}, \"response\": null, \"reasoning\": \"again\"}",
+          "{\"action\": \"call_tool\", \"tool\": \"get_game_status\", \"arguments\": {}, \"response\": null, \"reasoning\": \"again\"}"
+        ]
+      },
+      "expected": { "stop_reason": "repeated_call", "tool_count": 1 },
+      "expected_behavior": "An identical repeated call is refused rather than spinning."
+    },
+    {
+      "id": "guard-unregistered-tool-never-runs",
+      "category": "guardrails",
+      "target": "agent_run",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": {
+        "provider": "scripted",
+        "max_retries": 1,
+        "message": "run something dangerous",
+        "script": [
+          "{\"action\": \"call_tool\", \"tool\": \"os.system\", \"arguments\": {\"cmd\": \"rm -rf /\"}, \"response\": null, \"reasoning\": \"bad\"}",
+          "{\"action\": \"call_tool\", \"tool\": \"os.system\", \"arguments\": {\"cmd\": \"rm -rf /\"}, \"response\": null, \"reasoning\": \"bad\"}"
+        ]
+      },
+      "expected": { "all_tools_registered": true, "attempts_used": 0 },
+      "expected_behavior": "A tool name outside the registry is never executed; planning falls back to rules."
+    },
+    {
+      "id": "guard-too-many-tool-errors-stops",
+      "category": "guardrails",
+      "target": "agent_run",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": {
+        "provider": "scripted",
+        "max_retries": 0,
+        "max_iterations": 10,
+        "max_tool_errors": 2,
+        "allow_repeat_calls": true,
+        "message": "break it",
+        "script": [
+          "{\"action\": \"call_tool\", \"tool\": \"submit_guess\", \"arguments\": {\"guess\": 9999}, \"response\": null, \"reasoning\": \"bad\"}",
+          "{\"action\": \"call_tool\", \"tool\": \"submit_guess\", \"arguments\": {\"guess\": 9999}, \"response\": null, \"reasoning\": \"bad\"}",
+          "{\"action\": \"call_tool\", \"tool\": \"submit_guess\", \"arguments\": {\"guess\": 9999}, \"response\": null, \"reasoning\": \"bad\"}"
+        ]
+      },
+      "expected": { "stop_reason": "too_many_tool_errors", "attempts_used": 0, "succeeded": false },
+      "expected_behavior": "Repeated invalid tool calls stop the run instead of continuing indefinitely."
+    },
+    {
+      "id": "guard-invalid-arguments-rejected",
+      "category": "guardrails",
+      "target": "agent_run",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": {
+        "provider": "scripted",
+        "max_retries": 0,
+        "max_iterations": 3,
+        "message": "guess badly",
+        "script": [
+          "{\"action\": \"call_tool\", \"tool\": \"submit_guess\", \"arguments\": {\"guess\": \"not a number\"}, \"response\": null, \"reasoning\": \"bad\"}",
+          "{\"action\": \"respond\", \"tool\": null, \"arguments\": {}, \"response\": \"Stopped.\", \"reasoning\": \"done\"}"
+        ]
+      },
+      "expected": { "failed_tool_calls": 1, "attempts_used": 0 },
+      "expected_behavior": "Arguments that violate the tool's input schema are rejected before execution."
+    },
+
+    {
+      "id": "trace-is-recorded",
+      "category": "observability",
+      "target": "agent_run",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": { "message": "what is my status", "expected_tools": ["get_game_status"] },
+      "expected": { "trace_span_count": 5, "response_is_non_empty": true },
+      "expected_behavior": "A two-iteration run records 5 spans: the root, two decisions, one tool call and the response."
+    },
+    {
+      "id": "trace-grows-with-multi-step",
+      "category": "observability",
+      "target": "agent_run",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": {
+        "message": "start a hard game and explain the rules",
+        "expected_tools": ["start_game", "explain_rules"]
+      },
+      "expected": { "trace_span_count": 7 },
+      "expected_behavior": "A three-iteration run records 7 spans: the root, three decisions, two tool calls and the response."
+    },
+
+    {
+      "id": "contract-submit-guess-valid",
+      "category": "tool_contract",
+      "target": "tool_contract",
+      "input": { "tool": "submit_guess", "arguments": { "guess": 42 } },
+      "expected": { "registered": true, "arguments_valid": true, "mutates_state": true },
+      "expected_behavior": "A well-formed guess validates and the tool is marked as state-changing."
+    },
+    {
+      "id": "contract-submit-guess-wrong-type",
+      "category": "tool_contract",
+      "target": "tool_contract",
+      "input": { "tool": "submit_guess", "arguments": { "guess": "forty two" } },
+      "expected": { "arguments_valid": false },
+      "expected_behavior": "A non-integer guess is rejected by the input schema."
+    },
+    {
+      "id": "contract-submit-guess-missing-argument",
+      "category": "tool_contract",
+      "target": "tool_contract",
+      "input": { "tool": "submit_guess", "arguments": {} },
+      "expected": { "arguments_valid": false },
+      "expected_behavior": "A required argument cannot be omitted."
+    },
+    {
+      "id": "contract-rejects-extra-arguments",
+      "category": "tool_contract",
+      "target": "tool_contract",
+      "input": { "tool": "submit_guess", "arguments": { "guess": 42, "sneaky": "extra" } },
+      "expected": { "arguments_valid": false },
+      "expected_behavior": "Extra fields are forbidden, so a tool cannot be passed anything it did not declare."
+    },
+    {
+      "id": "contract-unregistered-tool",
+      "category": "tool_contract",
+      "target": "tool_contract",
+      "input": { "tool": "exec_shell", "arguments": {} },
+      "expected": { "registered": false, "arguments_valid": false },
+      "expected_behavior": "A tool outside the registry does not exist as far as the agent is concerned."
+    },
+    {
+      "id": "contract-read-only-tool",
+      "category": "tool_contract",
+      "target": "tool_contract",
+      "input": { "tool": "get_game_status", "arguments": {} },
+      "expected": { "registered": true, "arguments_valid": true, "mutates_state": false },
+      "expected_behavior": "Read-only tools are declared as such so the planner can distinguish them."
+    }
+  ]
+}

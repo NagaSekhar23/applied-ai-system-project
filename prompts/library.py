@@ -157,10 +157,59 @@ Examples:
     user_template="Game context:\n{facts}\n\nPlayer message: {question}",
 )
 
+AGENT_PLAN_PROMPT = Prompt(
+    name="agent_plan",
+    version="1.0.0",
+    system="""You plan one step at a time for an assistant that helps a player
+with a number-guessing game. On each turn you choose exactly one action.
+
+You do not play the game and you do not decide outcomes. Tools do the work and
+the game's own code decides every result.
+
+Actions:
+- "call_tool"  run one tool from available_tools. Set "tool" and "arguments".
+- "respond"    every requested step is done; summarise what happened.
+- "clarify"    the request is ambiguous or unsupported; ask a question.
+
+Restrictions:
+- "tool" must be exactly one name from available_tools. Never invent a tool.
+- "arguments" must match that tool's input_schema. Never pass extra fields.
+- Check tools_already_called. Never call the same tool twice for one request.
+- Never guess a number the player did not give. If they want a guess chosen
+  for them, call request_hint instead.
+- Do not call a state-changing tool (mutates_state true) unless the player
+  clearly asked for it. Starting or resetting a game discards progress.
+- If the game status is not "playing", do not call submit_guess.
+- When the request needs several steps, do them one per turn, then respond.
+
+Output requirements:
+Reply with a single JSON object and nothing else:
+{
+  "action": "call_tool" | "respond" | "clarify",
+  "tool": "<tool name or null>",
+  "arguments": { },
+  "response": "<text for respond/clarify, else null>",
+  "reasoning": "<one short sentence>"
+}
+
+Examples:
+Request "start a hard game", nothing called yet:
+{"action": "call_tool", "tool": "start_game", "arguments": {"difficulty": "Hard"}, "response": null, "reasoning": "The player asked for a new Hard game."}
+
+Same request, after start_game has been called:
+{"action": "respond", "tool": null, "arguments": {}, "response": "Your Hard game is ready: guess between 1 and 50.", "reasoning": "The only requested step is done."}
+
+Request "do a backflip":
+{"action": "clarify", "tool": null, "arguments": {}, "response": "I can start a game, take a guess, or give you a hint. Which would you like?", "reasoning": "Unsupported request."}
+""",
+    user_template="Context:\n{facts}\n\nPlayer request: {question}",
+)
+
 PROMPTS: dict[str, Prompt] = {
     "hint": HINT_PROMPT,
     "explain_rules": RULES_PROMPT,
     "parse_command": PARSE_COMMAND_PROMPT,
+    "agent_plan": AGENT_PLAN_PROMPT,
 }
 
 

@@ -105,6 +105,7 @@ def _explain_handler(facts: dict[str, Any], user: str = "") -> dict[str, Any]:
 
 
 PLAYER_MESSAGE = re.compile(r"Player message:\s*(.*)\s*$", re.DOTALL)
+PLAYER_REQUEST = re.compile(r"Player request:\s*(.*)\s*$", re.DOTALL)
 
 
 def _parse_command_handler(facts: dict[str, Any], user: str = "") -> dict[str, Any]:
@@ -127,10 +128,33 @@ def _parse_command_handler(facts: dict[str, Any], user: str = "") -> dict[str, A
     }
 
 
+def _agent_plan_handler(facts: dict[str, Any], user: str = "") -> dict[str, Any]:
+    """Plan one step by reusing the deterministic rule-based planner.
+
+    Imported lazily to avoid a circular import, as above.
+    """
+    from agents.planner import rule_based_plan
+    from agents.tools import default_registry
+
+    match = PLAYER_MESSAGE.search(user) or PLAYER_REQUEST.search(user)
+    message = match.group(1).strip() if match else user
+    decision = rule_based_plan(
+        message, None, list(facts.get("tools_already_called", [])), default_registry()
+    )
+    return {
+        "action": decision.action,
+        "tool": decision.tool,
+        "arguments": decision.arguments,
+        "response": decision.response,
+        "reasoning": decision.reasoning,
+    }
+
+
 DEFAULT_HANDLERS: dict[str, Callable[..., dict[str, Any]]] = {
     "hint": _hint_handler,
     "explain_rules": _explain_handler,
     "parse_command": _parse_command_handler,
+    "agent_plan": _agent_plan_handler,
 }
 
 

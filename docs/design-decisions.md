@@ -285,3 +285,71 @@ difficulty, so it reflects state rather than competing with it.
 
 **Trade-off.** The selectbox is now derived state. That is the correct
 direction of flow here: one owner of difficulty, which is the game.
+
+---
+
+## D19 — Tools as a registry, not a dispatch on names
+
+**Decision.** `ToolRegistry` holds explicitly constructed `Tool` objects.
+Lookup is a dict access that raises `UnknownToolError` on a miss.
+
+**Alternatives.**
+- *`getattr(module, tool_name)`.* Rejected: the model's output space becomes
+  the module's namespace.
+- *Decorator-based auto-registration.* Rejected as implicit — the point is
+  that the reachable set is visible in one list.
+
+**Trade-off.** Registering a tool is ~10 lines of boilerplate. That is the
+cost of being able to state exactly what the agent can do.
+
+---
+
+## D20 — Output schemas as well as input schemas
+
+**Decision.** Each tool declares `output_model`, and `validate_output` runs
+after every successful call.
+
+**Rationale.** Input validation protects the app from the model. Output
+validation protects the agent from the app: if a tool drifts from its
+contract, that surfaces as a clear schema error rather than as confusing
+downstream behavior.
+
+**Trade-off.** A little duplication between the tool's return and its schema.
+Worth it — it caught contract mistakes while this phase was being written.
+
+---
+
+## D21 — Recoverable tool errors, terminal guard breaches
+
+**Decision.** A failed tool call is fed back to the planner as an observation
+and the loop continues. Guard breaches end the run.
+
+**Rationale.** Self-correction is the main practical benefit of an agent loop:
+"that guess was out of range" is enough for the next decision to be better.
+But self-correction must not become an excuse to never stop, so the error
+budget is itself bounded.
+
+---
+
+## D22 — Repeated-call protection by argument signature
+
+**Decision.** `tool:{sorted json of arguments}` is recorded; an exact repeat
+ends the run.
+
+**Rationale.** The common agent failure is calling the same tool with the same
+arguments forever. Keying on arguments rather than the tool name alone still
+allows legitimate repeats — two different guesses — while catching the loop.
+
+**Trade-off.** A genuine identical repeat (checking status twice) is refused.
+Acceptable, and `allow_repeat_calls` exists for tests that need it.
+
+---
+
+## D23 — Trace structure built in Phase 5, consumed in Phase 6
+
+**Decision.** `Span`/`AgentTrace` with parent ids and durations exist now,
+before there is a dashboard to read them.
+
+**Rationale.** Retro-fitting tracing means touching every call site. Building
+the structure while writing the loop costs almost nothing; adding it later
+would be a refactor of the thing most at risk of regression.

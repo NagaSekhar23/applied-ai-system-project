@@ -33,4 +33,11 @@ def full_registry() -> dict[str, Executor]:
     else:
         registry.update(NL_EXECUTORS)
 
+    try:
+        from evaluation.agent_executors import AGENT_EXECUTORS
+    except ImportError:  # pragma: no cover
+        pass
+    else:
+        registry.update(AGENT_EXECUTORS)
+
     return registry
