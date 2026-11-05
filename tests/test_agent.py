@@ -9,7 +9,7 @@ import random
 from dataclasses import replace
 
 import pytest
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
 from agents import (
     AgentConfig,
@@ -18,7 +18,6 @@ from agents import (
     Planner,
     Tool,
     ToolContext,
-    ToolRegistry,
     ToolResult,
     ToolValidationError,
     UnknownToolError,
@@ -26,7 +25,7 @@ from agents import (
     default_registry,
     rule_based_plan,
 )
-from agents.tools import GuessInput, NoInput, snapshot_of
+from agents.tools import NoInput, snapshot_of
 from assistant import Assistant
 from game import new_game
 from providers import LLMTimeoutError, MockProvider, ReliableLLMClient, ScriptedProvider

@@ -366,6 +366,39 @@ def test_leak_detector_is_inactive_once_the_game_is_over():
     assert leaks_secret("the number was 50", finished) is False
 
 
+# --- Regression: the secret coinciding with a public number -----------------
+#
+# The rules explanation quotes range bounds, attempt limits and the fixed
+# scoring constants (100, 10, 5) regardless of what the secret is. A random
+# secret that happens to equal one of those numbers must not be treated as a
+# disclosure.
+
+
+def test_leak_detector_exempts_fixed_scoring_constants():
+    for constant in (100, 10, 5):
+        state = game(secret=constant)
+        assert leaks_secret(f"a correct guess scores up to {constant}", state) is False
+
+
+def test_leak_detector_exempts_numbers_the_model_was_actually_given():
+    state = game(secret=1)  # Normal difficulty's low bound
+    facts = build_facts(state, last_outcome=None)
+    assert leaks_secret("the range starts at 1", state, facts) is False
+
+
+def test_leak_detector_needs_facts_to_exempt_a_facts_derived_number():
+    # Without the facts block there is no context to exempt the coincidence,
+    # so the strict, facts-agnostic check still applies.
+    state = game(secret=1)
+    assert leaks_secret("the range starts at 1", state) is True
+
+
+def test_leak_detector_still_catches_a_genuine_leak_despite_the_exemptions():
+    state = game(secret=73)
+    facts = build_facts(state, last_outcome=None)
+    assert leaks_secret("the secret is 73", state, facts) is True
+
+
 @pytest.mark.parametrize(
     "outcome, expected",
     [

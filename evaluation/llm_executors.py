@@ -79,18 +79,20 @@ def execute_assistant_hint(case: EvalCase) -> dict[str, Any]:
     def run() -> dict[str, Any]:
         state = _state_from(case)
         assistant = _build_assistant(case)
+        last_outcome = case.input.get("last_outcome")
         reply = assistant.hint(
             state,
-            last_outcome=case.input.get("last_outcome"),
+            last_outcome=last_outcome,
             question=case.input.get("question", ""),
             purpose=case.input.get("purpose", "hint"),
         )
+        facts = build_facts(state, last_outcome)
         return {
             "source": reply.source,
             "category": reply.category.value,
             "used_llm": reply.used_llm,
             "message_is_non_empty": bool(reply.message.strip()),
-            "leaks_secret": leaks_secret(reply.message, state),
+            "leaks_secret": leaks_secret(reply.message, state, facts),
             "has_fallback_reason": reply.fallback_reason is not None,
             "warning_count": len(reply.warnings),
             "attempts": reply.stats.attempts if reply.stats else 0,
@@ -110,7 +112,7 @@ def execute_prompt_safety(case: EvalCase) -> dict[str, Any]:
         rendered = prompt.render_user(facts, case.input.get("question", ""))
         return {
             "facts_contain_secret": "secret" in facts,
-            "prompt_leaks_secret": leaks_secret(rendered, state),
+            "prompt_leaks_secret": leaks_secret(rendered, state, facts),
             "prompt_id": prompt.id,
             "mentions_restrictions": "never" in prompt.system.lower(),
         }

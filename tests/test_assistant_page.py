@@ -138,6 +138,30 @@ def test_rules_button_uses_the_rules_prompt():
     assert at.session_state["assistant_reply"].prompt_id == "assistant_rules@1.0.0"
 
 
+# --- Regression: public numbers coinciding with the secret -------------------
+#
+# The mock's rules explanation always quotes the range bounds, attempt limit
+# and the fixed scoring constants (100, 10, 5). None of that depends on the
+# secret, so when the random secret happens to equal one of those numbers,
+# that is not a disclosure and must not trip the leak guard into a fallback
+# reply. On fresh-game Normal difficulty (low=1, high=100, max_attempts=8,
+# attempts_left=8, score=0) the numbers at risk are 1, 5, 8, 10, 100 and 0.
+@pytest.mark.parametrize("secret", [1, 5, 8, 10, 100])
+def test_rules_button_survives_a_secret_equal_to_a_public_number(secret):
+    at = AppTest.from_file(APP, default_timeout=10).run()
+    at.session_state["game"] = replace(at.session_state["game"], secret=secret)
+    at.run()
+
+    goto_assistant(at)
+    _button(at, "rules").click()
+    at.run()
+
+    reply = at.session_state["assistant_reply"]
+    assert reply.source == "llm"
+    assert reply.fallback_reason is None
+    assert reply.prompt_id == "assistant_rules@1.0.0"
+
+
 def test_reply_is_labelled_with_its_source():
     at = goto_assistant(AppTest.from_file(APP, default_timeout=10).run())
     _button(at, "hint").click()

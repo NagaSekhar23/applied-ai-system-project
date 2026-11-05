@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from game import GameState
+from logic_utils import MIN_WIN_POINTS, WIN_BASE_POINTS, WIN_POINTS_PER_GUESS, WRONG_GUESS_PENALTY
 from prompts import get_prompt
 from providers import CallStats, LLMRequest, ReliableLLMClient
 from schemas import AssistantHint, HintCategory
@@ -93,16 +94,63 @@ def deterministic_hint(state: GameState, last_outcome: str | None) -> tuple[str,
     return base, category
 
 
-def leaks_secret(message: str, state: GameState) -> bool:
+# Scoring-formula constants quoted verbatim by the rules explanation. They are
+# fixed in code and identical in every game, independent of the secret, so a
+# message containing one of them is never evidence that the model obtained
+# the secret: it would say the same thing no matter what the secret is.
+PUBLIC_GAME_CONSTANTS: frozenset[int] = frozenset(
+    {WIN_BASE_POINTS, WIN_POINTS_PER_GUESS, MIN_WIN_POINTS, WRONG_GUESS_PENALTY}
+)
+
+
+def _public_facts_numbers(facts: dict[str, Any]) -> set[int]:
+    """Numeric values taken from a facts block the model was actually given.
+
+    The model is restricted to the facts block by its own system prompt
+    ("Never invent attempts, scores, or history that are not in the facts
+    block"), so any of these values has a legitimate, non-secret source —
+    regardless of what the secret itself happens to be.
+    """
+    numbers: set[int] = set()
+    for key in ("low", "high", "max_attempts", "attempts_used", "attempts_left", "score"):
+        value = facts.get(key)
+        if isinstance(value, int):
+            numbers.add(value)
+    for guess in facts.get("guess_history") or ():
+        if isinstance(guess, int):
+            numbers.add(guess)
+    last_guess = facts.get("last_guess")
+    if isinstance(last_guess, int):
+        numbers.add(last_guess)
+    return numbers
+
+
+def leaks_secret(message: str, state: GameState, facts: dict[str, Any] | None = None) -> bool:
     """True if the message appears to disclose the secret during play.
 
     Matches the number as a standalone token, so "50" is caught but the "50"
     inside "150" is not. Only applies while the game is in progress; once it
     is over the secret is public.
+
+    A standalone match is only flagged as a leak once it is also ruled out as
+    a coincidence with a number the model could legitimately produce without
+    ever knowing the secret: the fixed scoring constants (always present,
+    regardless of the secret) and, when ``facts`` is supplied, the facts block
+    actually handed to the model for this call (range bounds, attempt counts,
+    score, past guesses). Neither source can explain disclosure of the secret
+    itself — the facts block never contains it while the game is playing —
+    so this narrows false positives without weakening detection of an actual
+    leak, which by definition cannot be explained by either source.
     """
     if state.status != "playing":
         return False
-    return re.search(rf"(?<!\d){state.secret}(?!\d)", message) is not None
+    if re.search(rf"(?<!\d){state.secret}(?!\d)", message) is None:
+        return False
+    if state.secret in PUBLIC_GAME_CONSTANTS:
+        return False
+    if facts is not None and state.secret in _public_facts_numbers(facts):
+        return False
+    return True
 
 
 class Assistant:
@@ -160,7 +208,7 @@ class Assistant:
         warnings: list[str] = []
 
         # Guarantee 1: the model must not disclose the secret mid-game.
-        if leaks_secret(hint.message, state):
+        if leaks_secret(hint.message, state, facts):
             return fallback("model output disclosed the secret", result.stats)
 
         # Guarantee 2: deterministic logic wins any disagreement about outcome.
