@@ -86,12 +86,12 @@
       "category": "retrieval",
       "target": "rag_retrieval",
       "input": {
-        "query": "How is P95 latency calculated?",
+        "query": "What is redacted before an event is stored?",
         "relevant_sources": ["docs/observability.md"]
       },
       "expected": { "found_any_relevant": true },
-      "expected_behavior": "A metrics question retrieves the observability document somewhere in the top k. On the live corpus a design-decision entry that uses `p95_latency_ms` as an example often ranks above it: lexical scoring cannot tell a passage that mentions a term from one that explains it. That is a real limitation, recorded in docs/rag-architecture.md.",
-      "metadata": { "tags": ["live-corpus", "known-limitation"] }
+      "expected_behavior": "A redaction question retrieves the observability document. Live-corpus cases use queries with one unambiguous home in the docs; see D37 for why term-specific live queries proved unreliable.",
+      "metadata": { "tags": ["live-corpus"] }
     },
     {
       "id": "retrieve-evaluation-dataset-format",

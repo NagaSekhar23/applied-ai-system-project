@@ -33,7 +33,7 @@ explains results, parses language and picks tools, but never decides anything.
 Concretely: `check_guess` returns Too High, and the assistant's job is to turn
 that into a sentence. If the model claims a different outcome, my code
 overrides it and logs the disagreement. That boundary is why the whole system
-is testable without an API key — 518 tests, no network — and why a provider
+is testable without an API key — 520 tests, no network — and why a provider
 outage degrades the product instead of breaking it."
 
 ---

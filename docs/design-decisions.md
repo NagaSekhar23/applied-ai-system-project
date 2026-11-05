@@ -598,3 +598,39 @@ benchmarks ship fixed corpora rather than pointing at a living wiki.
 **Verification.** `test_rank_metrics_survive_an_edit_to_the_live_corpus` pins
 it, and appending an adversarial paragraph (mentioning chunking, p95, RRF and
 BM25) to the live docs now leaves every fingerprint unchanged.
+
+
+---
+
+## D37 — Live-corpus retrieval cases are smoke tests, not measurements
+
+**Problem.** D36 moved rank assertions to a frozen corpus and claimed the
+remaining live-corpus cases were robust because they asserted only
+"the relevant document was found". That claim was wrong, and it broke on the
+very next commit.
+
+Writing D34-D36 added three design-decision entries that discuss
+`p95_latency_ms` at length. The query "How is P95 latency calculated?" then
+retrieved those entries instead of the observability document that actually
+defines the metric - not just at a worse rank, but out of the top k entirely.
+
+The mechanism is a feedback loop specific to this project: the corpus is the
+documentation, and I kept documenting retrieval failures *into the corpus
+being searched*. Each write added competing passages on exactly the terms the
+evaluation queried.
+
+**Decision.** Treat live-corpus cases as smoke tests over queries with one
+unambiguous home in the documentation, not as measurements of retrieval
+quality. The P95 query was replaced with a redaction query, which has a single
+clear source. All quality measurement - rank, MRR, precision - lives on the
+frozen fixture corpus.
+
+**What I got wrong, twice.** Both earlier fixes were applied and then the docs
+were edited again *in the same commit*, without re-running the evaluation
+afterwards. The lesson is procedural as much as technical: when the corpus is
+the documentation, the evaluation must run after the last documentation edit,
+not before it.
+
+**Honest status.** Live-corpus retrieval is not a stable measurement in this
+project and is not presented as one. If this were a product, the corpus would
+be versioned separately from the code that documents it.

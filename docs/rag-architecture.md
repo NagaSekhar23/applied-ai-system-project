@@ -195,6 +195,10 @@ tracker, under the `retrieval` component.
   would be overfitting to the test set.
 - The heuristic reranker is not a trained cross-encoder.
 - Relevance labels are document-level, not passage-level.
+- **Live-corpus retrieval cases are smoke tests, not measurements.** The
+  corpus is this project's documentation, so writing about retrieval changes
+  retrieval. Quality metrics are measured on the frozen fixture corpus; see
+  design-decisions D36 and D37.
 - The corpus is six documents. Metrics on a corpus this small are
   demonstrations of method, not stable measurements.
 - The index is rebuilt in memory at startup. There is no persistence and no

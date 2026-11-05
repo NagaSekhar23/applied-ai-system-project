@@ -12,7 +12,7 @@ over game logic. Every AI feature degrades to a working deterministic path
 when the provider is unavailable.
 
 **It runs with no API key.** The default provider is a mock, so the whole
-application, its 518 tests and its 174 evaluation cases run offline, free, and
+application, its 520 tests and its 174 evaluation cases run offline, free, and
 deterministically.
 
 ---
@@ -134,7 +134,7 @@ logged, displayed, or written to a report.
 
 ```bash
 python -m streamlit run app.py     # the app
-python -m pytest                   # 518 tests, ~15s, no network
+python -m pytest                   # 520 tests (includes the evaluation suite), no network
 python -m evaluation.run           # 174 evaluation cases across 5 datasets
 python -m evaluation.run --quiet   # one line per dataset
 ```
@@ -144,7 +144,7 @@ python -m evaluation.run --quiet   # one line per dataset
 ### Current measured results
 
 ```
-518 passed                     (517 + 1 skip if the optional anthropic package is absent)
+520 passed                     (519 + 1 skip if the optional anthropic package is absent)
 
 agent:            27/27  (100%)
 game-logic:       56/56  (100%)

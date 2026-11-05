@@ -403,3 +403,36 @@ def test_cli_no_report_writes_nothing(tmp_path):
 
     main(["--dataset", f"{DATASET_DIR}/game_logic.json", "--report-dir", str(tmp_path), "--no-report", "--quiet"])
     assert list(tmp_path.iterdir()) == []
+
+
+# --- The evaluation suite is part of the test gate ---------------------------
+# Three times during development a documentation edit left an evaluation case
+# failing, and it was not noticed because `pytest` was green and the
+# evaluation CLI was run separately (and, twice, before the last doc edit
+# rather than after). Running every shipped dataset here makes `pytest` the
+# single gate: a red evaluation can no longer reach a commit unnoticed.
+
+
+def test_every_shipped_dataset_passes():
+    from evaluation.registry import full_registry
+
+    registry = full_registry()
+    failures: list[str] = []
+
+    for path in discover_datasets(DATASET_DIR):
+        run = run_dataset(load_dataset(path), registry=registry)
+        for result in run.failed_results:
+            detail = "; ".join(d.describe() for d in result.diffs) or result.error
+            failures.append(f"{run.dataset_name}/{result.case_id}: {detail}")
+
+    assert not failures, "evaluation cases failing:\n" + "\n".join(failures)
+
+
+def test_every_shipped_dataset_is_reproducible():
+    from evaluation.registry import full_registry
+
+    for path in discover_datasets(DATASET_DIR):
+        dataset = load_dataset(path)
+        first = run_dataset(dataset, registry=full_registry())
+        second = run_dataset(dataset, registry=full_registry())
+        assert first.fingerprint == second.fingerprint, dataset.name
