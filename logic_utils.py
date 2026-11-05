@@ -1,40 +1,123 @@
-def get_range_for_difficulty(difficulty: str):
-    """Return (low, high) inclusive range for a given difficulty."""
-    raise NotImplementedError("Refactor this function from app.py into logic_utils.py")
+"""Pure game rules: difficulty settings, input parsing, guess checking, and scoring.
+
+Nothing in this module imports Streamlit, so every rule can be tested directly.
+"""
+
+import re
+from dataclasses import dataclass
+from typing import NamedTuple
+
+OUTCOME_WIN = "Win"
+OUTCOME_TOO_HIGH = "Too High"
+OUTCOME_TOO_LOW = "Too Low"
+
+WRONG_GUESS_PENALTY = 5
+MIN_WIN_POINTS = 10
+WIN_BASE_POINTS = 100
+WIN_POINTS_PER_GUESS = 10
+
+_INTEGER_PATTERN = re.compile(r"[+-]?\d+")
 
 
-def parse_guess(raw: str):
+@dataclass(frozen=True)
+class DifficultyConfig:
+    """Settings for one difficulty level."""
+
+    low: int
+    high: int
+    max_attempts: int
+
+
+DIFFICULTY_CONFIGS: dict[str, DifficultyConfig] = {
+    "Easy": DifficultyConfig(low=1, high=20, max_attempts=6),
+    "Normal": DifficultyConfig(low=1, high=100, max_attempts=8),
+    "Hard": DifficultyConfig(low=1, high=50, max_attempts=5),
+}
+
+DIFFICULTY_NAMES: tuple[str, ...] = tuple(DIFFICULTY_CONFIGS)
+
+
+class ParseResult(NamedTuple):
+    """Result of parsing raw player input. ``value`` is set only when ``ok`` is True."""
+
+    ok: bool
+    value: int | None
+    error: str | None
+
+
+def get_difficulty_config(difficulty: str) -> DifficultyConfig:
+    """Return the settings for a difficulty name.
+
+    Raises:
+        ValueError: if the difficulty is unknown. We fail loudly rather than
+            silently falling back to a default.
     """
-    Parse user input into an int guess.
+    try:
+        return DIFFICULTY_CONFIGS[difficulty]
+    except KeyError:
+        raise ValueError(
+            f"Unknown difficulty {difficulty!r}; expected one of {DIFFICULTY_NAMES}"
+        ) from None
 
-    Returns: (ok: bool, guess_int: int | None, error_message: str | None)
+
+def get_range_for_difficulty(difficulty: str) -> tuple[int, int]:
+    """Return the inclusive (low, high) secret range for a difficulty."""
+    config = get_difficulty_config(difficulty)
+    return config.low, config.high
+
+
+def get_attempt_limit(difficulty: str) -> int:
+    """Return how many valid guesses a player gets at this difficulty."""
+    return get_difficulty_config(difficulty).max_attempts
+
+
+def parse_guess(raw: str | None, low: int = 1, high: int = 100) -> ParseResult:
+    """Validate raw text input as a whole number within [low, high].
+
+    Surrounding whitespace is ignored. Decimals such as "7.9" are rejected
+    rather than silently truncated.
     """
-    raise NotImplementedError("Refactor this function from app.py into logic_utils.py")
+    if raw is None or raw.strip() == "":
+        return ParseResult(False, None, "Enter a guess.")
+
+    text = raw.strip()
+    if not _INTEGER_PATTERN.fullmatch(text):
+        return ParseResult(False, None, "That is not a whole number.")
+
+    value = int(text)
+    if value < low or value > high:
+        return ParseResult(False, None, f"Your guess must be between {low} and {high}.")
+
+    return ParseResult(True, value, None)
 
 
-def check_guess(guess, secret):
-    """
-    Compare guess to secret and return (outcome, message).
+def check_guess(guess: int, secret: int) -> tuple[str, str]:
+    """Compare a guess to the secret and return ``(outcome, hint)``.
 
-    outcome examples: "Win", "Too High", "Too Low"
+    This is the only place that decides whether a guess is correct.
     """
     if guess == secret:
-        return "Win", "🎉 Correct!"
-
-    try:
-        if guess > secret:
-            return "Too High", "📉 Go LOWER!"
-        else:
-            return "Too Low", "📈 Go HIGHER!"
-    except TypeError:
-        g = str(guess)
-        if g == secret:
-            return "Win", "🎉 Correct!"
-        if g > secret:
-            return "Too High", "📉 Go LOWER!"
-        return "Too Low", "📈 Go HIGHER!"
+        return OUTCOME_WIN, "🎉 Correct!"
+    if guess > secret:
+        return OUTCOME_TOO_HIGH, "📉 Go LOWER!"
+    return OUTCOME_TOO_LOW, "📈 Go HIGHER!"
 
 
-def update_score(current_score: int, outcome: str, attempt_number: int):
-    """Update score based on outcome and attempt number."""
-    raise NotImplementedError("Refactor this function from app.py into logic_utils.py")
+def update_score(current_score: int, outcome: str, guess_number: int) -> int:
+    """Return the new score after a guess.
+
+    A win awards ``max(10, 100 - 10 * guess_number)`` points. A wrong guess
+    costs 5 points, whichever direction it was in.
+
+    Args:
+        guess_number: 1-based index of this valid guess in the game.
+
+    Raises:
+        ValueError: if the outcome is not recognised.
+    """
+    if outcome == OUTCOME_WIN:
+        points = max(MIN_WIN_POINTS, WIN_BASE_POINTS - WIN_POINTS_PER_GUESS * guess_number)
+        return current_score + points
+    if outcome in (OUTCOME_TOO_HIGH, OUTCOME_TOO_LOW):
+        return current_score - WRONG_GUESS_PENALTY
+    raise ValueError(f"Unknown outcome {outcome!r}")
