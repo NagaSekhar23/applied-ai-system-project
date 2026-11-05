@@ -53,7 +53,7 @@ def _estimate_tokens(text: str) -> int:
 # --- Default handlers, one per prompt purpose --------------------------------
 
 
-def _hint_handler(facts: dict[str, Any]) -> dict[str, Any]:
+def _hint_handler(facts: dict[str, Any], user: str = "") -> dict[str, Any]:
     outcome = facts.get("last_outcome")
     attempts_left = facts.get("attempts_left", 0)
     low, high = facts.get("low", 1), facts.get("high", 100)
@@ -89,7 +89,7 @@ def _hint_handler(facts: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _explain_handler(facts: dict[str, Any]) -> dict[str, Any]:
+def _explain_handler(facts: dict[str, Any], user: str = "") -> dict[str, Any]:
     return {
         "message": (
             f"You are playing {facts.get('difficulty', 'Normal')}: guess a number "
@@ -104,9 +104,33 @@ def _explain_handler(facts: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-DEFAULT_HANDLERS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
+PLAYER_MESSAGE = re.compile(r"Player message:\s*(.*)\s*$", re.DOTALL)
+
+
+def _parse_command_handler(facts: dict[str, Any], user: str = "") -> dict[str, Any]:
+    """Classify intent by reusing the deterministic rule-based parser.
+
+    Imported lazily: ``natural_language.parser`` imports this package, so a
+    module-level import here would be circular.
+    """
+    from natural_language.parser import rule_based_parse
+
+    match = PLAYER_MESSAGE.search(user)
+    message = match.group(1).strip() if match else user
+    command = rule_based_parse(message)
+    return {
+        "command": command.command.value,
+        "guess": command.guess,
+        "difficulty": command.difficulty,
+        "clarification": command.clarification,
+        "confidence": command.confidence,
+    }
+
+
+DEFAULT_HANDLERS: dict[str, Callable[..., dict[str, Any]]] = {
     "hint": _hint_handler,
     "explain_rules": _explain_handler,
+    "parse_command": _parse_command_handler,
 }
 
 
@@ -133,7 +157,11 @@ class MockProvider:
 
         facts = extract_facts(request.user)
         handler = self.handlers.get(request.purpose)
-        payload = handler(facts) if handler else {"message": "No mock handler for this purpose."}
+        payload = (
+            handler(facts, request.user)
+            if handler
+            else {"message": "No mock handler for this purpose."}
+        )
         text = json.dumps(payload) if request.json_schema else str(payload.get("message", ""))
 
         if self._latency_ms:

@@ -12,9 +12,9 @@ from __future__ import annotations
 import streamlit as st
 
 from config import ConfigError, load_settings
-from ui import assistant_page, game as game_page
+from ui import assistant_page, chat_page, game as game_page
 
-PAGES = ["Game", "AI Assistant"]
+PAGES = ["Game", "AI Assistant", "Natural Language"]
 
 st.set_page_config(page_title="Applied AI System", page_icon="🎮")
 
@@ -44,3 +44,5 @@ if page == "Game":
     game_page.render(difficulty, debug=settings.game_debug)
 elif page == "AI Assistant":
     assistant_page.render(settings)
+elif page == "Natural Language":
+    chat_page.render(settings)

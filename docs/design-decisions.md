@@ -220,3 +220,68 @@ project, so the default is the current general-purpose model rather than a
 quietly cheaper one. Effort defaults to `low` because generating a one-sentence
 hint is a simple task and effort is the right lever for that, not model
 downgrade. Both are one environment variable away from changing.
+
+---
+
+## D15 — A closed command enum instead of free-form instructions
+
+**Problem.** If model output is executed as an instruction, the model's output
+space becomes the application's action space.
+
+**Decision.** The parser emits one of seven `CommandType` values with typed
+arguments. The executor is a dispatch table over that enum.
+
+**Alternatives.**
+- *Tool/function calling with arbitrary arguments.* Used in Phase 5, where the
+  registry provides the same closure property.
+- *Natural-language instruction executed by code-gen.* Rejected outright: this
+  is the shape of injection vulnerabilities.
+
+**Trade-off.** Adding a capability means adding an enum member, a validator
+branch and a handler. That friction is the feature.
+
+---
+
+## D16 — A rule-based parser alongside the LLM one
+
+**Decision.** `rule_based_parse` handles common phrasings deterministically and
+is used as the mock behavior, the offline evaluation path, and the fallback.
+
+**Rationale.** It makes the feature free and testable offline, and it degrades
+gracefully: a provider outage costs unusual-phrasing support, not the feature.
+Writing it also forced an explicit list of the phrasings that must work, which
+became evaluation cases.
+
+**Trade-off.** Two parsers to maintain. Accepted because the rule parser is
+~60 lines and is pinned by its own tests.
+
+---
+
+## D17 — Validation re-uses the game's own `parse_guess`
+
+**Decision.** `_validate_guess` calls `logic_utils.parse_guess` rather than
+range-checking itself.
+
+**Rationale.** Two validators drift. If the conversational path had its own
+bounds check, a future change to the typed path would silently create a hole
+where chat accepts what the UI rejects.
+
+---
+
+## D18 — The difficulty control follows game state
+
+**Problem.** The sidebar selectbox and `GameState.difficulty` were two sources
+of truth. Starting a Hard game from the chat page set the state correctly, and
+the next run's stale "Normal" selectbox immediately replaced it with a new
+Normal game. Caught by an AppTest, not by reasoning.
+
+**Decision.** The selectbox initialises its index from the current game's
+difficulty, so it reflects state rather than competing with it.
+
+**Alternatives.**
+- *Write the widget's `key` in session state from the chat handler.* Rejected:
+  Streamlit restricts mutating a widget key after instantiation, so it would
+  work only from a callback and would be fragile.
+
+**Trade-off.** The selectbox is now derived state. That is the correct
+direction of flow here: one owner of difficulty, which is the game.

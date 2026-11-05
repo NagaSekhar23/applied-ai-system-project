@@ -1,0 +1,360 @@
+{
+  "name": "natural-language",
+  "version": 1,
+  "description": "Intent classification, argument extraction, validation and safe rejection for the natural language interface. Runs against the deterministic rule-based parser and the mock provider, so no API key is needed. A passing result shows the pipeline is correct; it does not measure how well a real LLM handles unusual phrasing.",
+  "cases": [
+    {
+      "id": "intent-start-hard-game",
+      "category": "intent_classification",
+      "target": "intent_parse",
+      "input": { "message": "Start a hard game." },
+      "expected": { "command": "START_GAME", "difficulty": "Hard" },
+      "expected_behavior": "A start request with a named difficulty extracts both."
+    },
+    {
+      "id": "intent-submit-guess-prose",
+      "category": "intent_classification",
+      "target": "intent_parse",
+      "input": { "message": "I think the number is 45." },
+      "expected": { "command": "SUBMIT_GUESS", "guess": 45 },
+      "expected_behavior": "A guess stated in prose is recognised."
+    },
+    {
+      "id": "intent-status-question",
+      "category": "intent_classification",
+      "target": "intent_parse",
+      "input": { "message": "How many tries do I have left?" },
+      "expected": { "command": "GET_GAME_STATUS" },
+      "expected_behavior": "A question about attempts is a status request."
+    },
+    {
+      "id": "intent-unsupported-request",
+      "category": "intent_classification",
+      "target": "intent_parse",
+      "input": { "message": "Tell me something." },
+      "expected": { "command": "UNKNOWN", "has_clarification": true },
+      "expected_behavior": "An unsupported request becomes UNKNOWN with a clarification."
+    },
+    {
+      "id": "intent-hint-request",
+      "category": "intent_classification",
+      "target": "intent_parse",
+      "input": { "message": "Give me a hint." },
+      "expected": { "command": "REQUEST_HINT" },
+      "expected_behavior": "A hint request is classified as REQUEST_HINT."
+    },
+    {
+      "id": "intent-paraphrase-stuck",
+      "category": "paraphrase",
+      "target": "intent_parse",
+      "input": { "message": "I am completely stuck here" },
+      "expected": { "command": "REQUEST_HINT" },
+      "expected_behavior": "A different phrasing of asking for help maps to the same intent."
+    },
+    {
+      "id": "intent-paraphrase-score",
+      "category": "paraphrase",
+      "target": "intent_parse",
+      "input": { "message": "how am i doing so far" },
+      "expected": { "command": "GET_GAME_STATUS" },
+      "expected_behavior": "An informal progress question is a status request."
+    },
+    {
+      "id": "intent-paraphrase-lets-play",
+      "category": "paraphrase",
+      "target": "intent_parse",
+      "input": { "message": "let's play a new easy game" },
+      "expected": { "command": "START_GAME", "difficulty": "Easy" },
+      "expected_behavior": "An informal start request still extracts difficulty."
+    },
+    {
+      "id": "intent-paraphrase-reset",
+      "category": "paraphrase",
+      "target": "intent_parse",
+      "input": { "message": "start over please" },
+      "expected": { "command": "RESET_GAME" },
+      "expected_behavior": "'start over' is a reset, not a new game, even though it contains 'start'."
+    },
+
+    {
+      "id": "args-digits",
+      "category": "argument_extraction",
+      "target": "intent_parse",
+      "input": { "message": "guess 42" },
+      "expected": { "command": "SUBMIT_GUESS", "guess": 42 },
+      "expected_behavior": "Digits are extracted directly."
+    },
+    {
+      "id": "args-hyphenated-words",
+      "category": "argument_extraction",
+      "target": "intent_parse",
+      "input": { "message": "my guess is forty-five" },
+      "expected": { "guess": 45 },
+      "expected_behavior": "A hyphenated word number is converted."
+    },
+    {
+      "id": "args-spaced-words",
+      "category": "argument_extraction",
+      "target": "intent_parse",
+      "input": { "message": "try twenty one" },
+      "expected": { "guess": 21 },
+      "expected_behavior": "A spaced compound word number is converted."
+    },
+    {
+      "id": "args-hundred",
+      "category": "argument_extraction",
+      "target": "intent_parse",
+      "input": { "message": "is it one hundred" },
+      "expected": { "guess": 100 },
+      "expected_behavior": "'one hundred' is 100, not 1."
+    },
+    {
+      "id": "args-difficulty-change",
+      "category": "argument_extraction",
+      "target": "intent_parse",
+      "input": { "message": "change difficulty to easy" },
+      "expected": { "command": "CHANGE_DIFFICULTY", "difficulty": "Easy" },
+      "expected_behavior": "A difficulty change extracts the target difficulty."
+    },
+
+    {
+      "id": "ambiguous-bare-difficulty",
+      "category": "ambiguity",
+      "target": "intent_parse",
+      "input": { "message": "hard" },
+      "expected": { "command": "UNKNOWN", "has_clarification": true, "difficulty": "Hard" },
+      "expected_behavior": "A bare difficulty word is ambiguous between starting and switching, so it asks."
+    },
+    {
+      "id": "ambiguous-empty-message",
+      "category": "ambiguity",
+      "target": "intent_parse",
+      "input": { "message": "" },
+      "expected": { "command": "UNKNOWN", "has_clarification": true },
+      "expected_behavior": "An empty message asks for input rather than erroring."
+    },
+    {
+      "id": "ambiguous-gibberish",
+      "category": "ambiguity",
+      "target": "intent_parse",
+      "input": { "message": "asdfghjkl" },
+      "expected": { "command": "UNKNOWN", "has_clarification": true },
+      "expected_behavior": "Unrecognisable input asks for clarification."
+    },
+
+    {
+      "id": "validate-guess-in-range",
+      "category": "validation",
+      "target": "command_validation",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": { "message": "guess 42" },
+      "expected": { "valid": true, "issue_count": 0 },
+      "expected_behavior": "An in-range guess on a live game validates."
+    },
+    {
+      "id": "validate-guess-out-of-range",
+      "category": "validation",
+      "target": "command_validation",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": { "message": "guess 500" },
+      "expected": { "valid": false, "issue_count": 1 },
+      "expected_behavior": "An out-of-range guess is rejected before execution."
+    },
+    {
+      "id": "validate-guess-out-of-hard-range",
+      "category": "validation",
+      "target": "command_validation",
+      "initial_state": { "difficulty": "Hard", "secret": 25 },
+      "input": { "message": "guess 51" },
+      "expected": { "valid": false },
+      "expected_behavior": "The range check uses the active difficulty, not a fixed 1-100."
+    },
+    {
+      "id": "validate-guess-on-finished-game",
+      "category": "validation",
+      "target": "command_validation",
+      "initial_state": { "difficulty": "Normal", "secret": 50, "status": "won" },
+      "input": { "message": "guess 42" },
+      "expected": { "valid": false },
+      "expected_behavior": "A finished game rejects further guesses."
+    },
+    {
+      "id": "validate-guess-without-a-game",
+      "category": "validation",
+      "initial_state": { "game_in_progress": false },
+      "target": "command_validation",
+      "input": { "message": "guess 42" },
+      "expected": { "valid": false },
+      "expected_behavior": "A guess with no game in progress is rejected."
+    },
+    {
+      "id": "validate-status-allowed-after-game-over",
+      "category": "validation",
+      "target": "command_validation",
+      "initial_state": { "difficulty": "Normal", "secret": 50, "status": "lost" },
+      "input": { "message": "what is my score" },
+      "expected": { "valid": true },
+      "expected_behavior": "Reading status is allowed once a game is over."
+    },
+    {
+      "id": "validate-unknown-needs-clarification",
+      "category": "validation",
+      "target": "command_validation",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": { "message": "do a barrel roll" },
+      "expected": { "valid": false, "needs_clarification": true },
+      "expected_behavior": "An unknown intent is a clarification request, not a validation error."
+    },
+
+    {
+      "id": "pipeline-guess-executes",
+      "category": "execution",
+      "target": "nl_pipeline",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": { "message": "I think the number is 60" },
+      "expected": {
+        "command": "SUBMIT_GUESS",
+        "executed": true,
+        "attempts_used": 1,
+        "status": "playing"
+      },
+      "expected_behavior": "A valid guess runs through the whole pipeline and advances the game."
+    },
+    {
+      "id": "pipeline-winning-guess",
+      "category": "execution",
+      "target": "nl_pipeline",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": { "message": "guess 50" },
+      "expected": { "executed": true, "status": "won", "score": 90 },
+      "expected_behavior": "Winning through natural language scores exactly as the typed path does."
+    },
+    {
+      "id": "pipeline-start-game",
+      "category": "execution",
+      "target": "nl_pipeline",
+      "initial_state": { "game_in_progress": false },
+      "input": { "message": "start a hard game" },
+      "expected": { "command": "START_GAME", "executed": true, "difficulty": "Hard", "attempts_used": 0 },
+      "expected_behavior": "A game can be started from natural language with no prior game."
+    },
+    {
+      "id": "pipeline-change-difficulty-resets",
+      "category": "execution",
+      "target": "nl_pipeline",
+      "initial_state": { "difficulty": "Normal", "secret": 50, "attempts_used": 3, "score": 20 },
+      "input": { "message": "change difficulty to easy" },
+      "expected": {
+        "command": "CHANGE_DIFFICULTY",
+        "executed": true,
+        "difficulty": "Easy",
+        "attempts_used": 0,
+        "score": 0
+      },
+      "expected_behavior": "Changing difficulty starts a fresh game, matching the typed path."
+    },
+    {
+      "id": "pipeline-status-does-not-change-state",
+      "category": "execution",
+      "target": "nl_pipeline",
+      "initial_state": { "difficulty": "Normal", "secret": 50, "attempts_used": 2 },
+      "input": { "message": "how many attempts do I have" },
+      "expected": { "command": "GET_GAME_STATUS", "executed": true, "attempts_used": 2, "state_unchanged": true },
+      "expected_behavior": "A read-only command leaves state untouched."
+    },
+    {
+      "id": "pipeline-hint-does-not-change-state",
+      "category": "execution",
+      "target": "nl_pipeline",
+      "initial_state": { "difficulty": "Normal", "secret": 50, "attempts_used": 1 },
+      "input": { "message": "give me a hint", "last_outcome": "Too High" },
+      "expected": { "command": "REQUEST_HINT", "executed": true, "attempts_used": 1, "state_unchanged": true },
+      "expected_behavior": "Asking for a hint never consumes an attempt."
+    },
+
+    {
+      "id": "reject-out-of-range-guess-end-to-end",
+      "category": "safe_rejection",
+      "target": "nl_pipeline",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": { "message": "guess 500" },
+      "expected": {
+        "executed": false,
+        "was_rejected": true,
+        "attempts_used": 0,
+        "message_is_non_empty": true
+      },
+      "expected_behavior": "An invalid guess is rejected with an explanation and costs no attempt."
+    },
+    {
+      "id": "reject-guess-after-game-over",
+      "category": "safe_rejection",
+      "target": "nl_pipeline",
+      "initial_state": { "difficulty": "Normal", "secret": 50, "status": "won", "attempts_used": 1 },
+      "input": { "message": "guess 42" },
+      "expected": { "executed": false, "attempts_used": 1 },
+      "expected_behavior": "A finished game cannot be advanced through natural language."
+    },
+    {
+      "id": "reject-unknown-intent",
+      "category": "safe_rejection",
+      "target": "nl_pipeline",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": { "message": "delete all the files" },
+      "expected": {
+        "command": "UNKNOWN",
+        "executed": false,
+        "needs_clarification": true,
+        "attempts_used": 0
+      },
+      "expected_behavior": "An unsupported request executes nothing and asks what was meant."
+    },
+    {
+      "id": "reject-invalid-model-command-falls-back",
+      "category": "safe_rejection",
+      "target": "nl_pipeline",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": {
+        "provider": "scripted",
+        "max_retries": 1,
+        "script": [
+          "{\"command\": \"DELETE_EVERYTHING\", \"guess\": null, \"difficulty\": null, \"clarification\": null, \"confidence\": 0.99}",
+          "{\"command\": \"DELETE_EVERYTHING\", \"guess\": null, \"difficulty\": null, \"clarification\": null, \"confidence\": 0.99}"
+        ],
+        "message": "do something strange"
+      },
+      "expected": { "parse_source": "rules", "command": "UNKNOWN", "executed": false, "attempts_used": 0 },
+      "expected_behavior": "A command type outside the enum cannot reach the executor; the parser falls back to rules."
+    },
+    {
+      "id": "reject-model-invented-guess-still-validated",
+      "category": "safe_rejection",
+      "target": "nl_pipeline",
+      "initial_state": { "difficulty": "Hard", "secret": 25 },
+      "input": {
+        "provider": "scripted",
+        "max_retries": 0,
+        "script": [
+          "{\"command\": \"SUBMIT_GUESS\", \"guess\": 9999, \"difficulty\": null, \"clarification\": null, \"confidence\": 0.99}"
+        ],
+        "message": "guess something"
+      },
+      "expected": { "command": "SUBMIT_GUESS", "executed": false, "attempts_used": 0 },
+      "expected_behavior": "Even a confident, schema-valid model guess is range-checked before execution."
+    },
+    {
+      "id": "fallback-parser-on-provider-failure",
+      "category": "safe_rejection",
+      "target": "nl_pipeline",
+      "initial_state": { "difficulty": "Normal", "secret": 50 },
+      "input": {
+        "provider": "scripted",
+        "max_retries": 0,
+        "script": ["not json at all"],
+        "message": "guess 42"
+      },
+      "expected": { "parse_source": "rules", "command": "SUBMIT_GUESS", "executed": true },
+      "expected_behavior": "When the model returns unusable output, the rule-based parser keeps the feature working."
+    }
+  ]
+}

@@ -218,3 +218,73 @@ Assistant.hint(state, last_outcome)
 Token usage is reported as `None` when the provider does not supply it. It is
 never estimated for a real provider, because a fabricated count would corrupt
 cost reporting. The mock provider labels its counts as estimates.
+
+---
+
+## Phase 4 components: the natural language interface
+
+```
+natural_language/
+  commands.py   CommandType enum + Pydantic Command, ValidatedCommand.
+  parser.py     rule_based_parse() and CommandParser (LLM + rule fallback).
+  validator.py  validate(command, state) -> ValidatedCommand.
+  executor.py   CommandExecutor dispatch table + handle_message() pipeline.
+ui/chat_page.py The conversational page, showing each pipeline stage.
+```
+
+### The pipeline
+
+```
+user message
+   │
+   ▼
+CommandParser.parse()            interprets only; touches no state
+   │   ├── LLM with structured output (Command.json_schema())
+   │   └── falls back to rule_based_parse() on failure
+   ▼
+Command                          closed enum + typed arguments
+   │
+   ▼
+validate(command, state)         is it permitted *right now*?
+   │   ├── argument present and well-typed
+   │   ├── guess re-checked with the game's own parse_guess()
+   │   └── action legal for the current status
+   ▼
+ValidatedCommand (ok / issues / needs_clarification)
+   │
+   ▼
+CommandExecutor.execute()        dispatch table over the enum
+   │   └── calls new_game / submit_guess / Assistant
+   ▼
+ExecutionResult                  new state + message for the user
+```
+
+### Why a closed enum is the security boundary
+
+The model cannot emit an instruction; it can only emit a `CommandType`. An
+invented value such as `DELETE_EVERYTHING` fails Pydantic validation, the
+parser falls back to rules, and the executor is never reached. There is no
+`eval`, no string dispatch, and no handler that is not registered in
+`CommandExecutor._handlers()`.
+
+Three independent checks must all pass before state changes:
+
+1. **Schema** — Pydantic: is this a known command with well-typed arguments?
+2. **Validation** — is it permitted in the current state? Guesses are
+   re-checked with the game's own `parse_guess`, so the conversational path
+   cannot accept input the typed path would reject.
+3. **The game service** — `submit_guess` remains the final authority and is
+   still free to reject.
+
+A model-reported `confidence` below the threshold becomes a clarification
+request. Confidence never *authorises* an action; it can only withhold one.
+
+### Two parsers
+
+`rule_based_parse` is deterministic keyword and number matching, including
+word numbers ("forty-five" → 45). It is the mock provider's behavior, the
+offline evaluation path, and the fallback when the model fails — so the
+feature degrades to "works on common phrasings" rather than breaking.
+
+The LLM parser earns its place on unusual phrasing and typos, which the rules
+miss. In mock mode only the rules run, and the UI says so.

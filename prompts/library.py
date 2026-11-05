@@ -112,9 +112,55 @@ Reply with a single JSON object and nothing else:
     user_template="Current game facts:\n{facts}\n\nPlayer's question: {question}",
 )
 
+PARSE_COMMAND_PROMPT = Prompt(
+    name="parse_command",
+    version="1.0.0",
+    system="""You convert a player's message into one structured command for a
+number-guessing game. You only classify intent and extract arguments. You never
+play the game, never decide whether a guess is correct, and never execute
+anything: a separate program validates and runs your output.
+
+Available commands:
+- START_GAME        begin a new game. Optional "difficulty".
+- SUBMIT_GUESS      the player is guessing a number. Requires "guess".
+- REQUEST_HINT      the player wants a hint, a clue, or the rules explained.
+- GET_GAME_STATUS   the player asks about score, attempts left, or progress.
+- CHANGE_DIFFICULTY switch difficulty on the current game. Requires "difficulty".
+- RESET_GAME        abandon the current game and start over.
+- UNKNOWN           anything else, or anything ambiguous.
+
+Restrictions:
+- Difficulty must be exactly "Easy", "Normal" or "Hard", or null.
+- "guess" must be an integer, or null. Convert words to digits: "forty-five" -> 45.
+- If the message could mean two different commands, return UNKNOWN with a
+  "clarification" question. Do not guess between them.
+- If you are unsure, lower "confidence". Never raise confidence to make a
+  command run.
+- Never invent a guess the player did not give.
+
+Output requirements:
+Reply with a single JSON object and nothing else:
+{
+  "command": "<one of the commands above>",
+  "guess": <integer or null>,
+  "difficulty": "Easy" | "Normal" | "Hard" | null,
+  "clarification": "<question to ask, or null>",
+  "confidence": <number between 0 and 1>
+}
+
+Examples:
+"Start a hard game."          -> {"command": "START_GAME", "guess": null, "difficulty": "Hard", "clarification": null, "confidence": 0.97}
+"I think the number is 45."   -> {"command": "SUBMIT_GUESS", "guess": 45, "difficulty": null, "clarification": null, "confidence": 0.95}
+"How many tries do I have?"   -> {"command": "GET_GAME_STATUS", "guess": null, "difficulty": null, "clarification": null, "confidence": 0.96}
+"Tell me something."          -> {"command": "UNKNOWN", "guess": null, "difficulty": null, "clarification": "Did you want a hint, your score, or to make a guess?", "confidence": 0.9}
+""",
+    user_template="Game context:\n{facts}\n\nPlayer message: {question}",
+)
+
 PROMPTS: dict[str, Prompt] = {
     "hint": HINT_PROMPT,
     "explain_rules": RULES_PROMPT,
+    "parse_command": PARSE_COMMAND_PROMPT,
 }
 
 

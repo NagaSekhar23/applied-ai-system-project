@@ -59,9 +59,20 @@ def show_feedback(feedback: GuessResult, show_hint: bool) -> None:
 
 
 def render_sidebar() -> str:
-    """Render difficulty settings and return the selected difficulty."""
+    """Render difficulty settings and return the selected difficulty.
+
+    The control is initialised from the *current game's* difficulty, so there
+    is one source of truth. A command that changes difficulty (from the
+    Natural Language page, say) is therefore reflected here, instead of being
+    overwritten by a stale widget value on the next run.
+    """
     st.sidebar.header("Settings")
-    difficulty = st.sidebar.selectbox("Difficulty", list(DIFFICULTY_NAMES), index=1)
+    names = list(DIFFICULTY_NAMES)
+    game = st.session_state.get("game")
+    current = game.difficulty if game is not None else "Normal"
+    index = names.index(current) if current in names else names.index("Normal")
+
+    difficulty = st.sidebar.selectbox("Difficulty", names, index=index)
     config = get_difficulty_config(difficulty)
     st.sidebar.caption(f"Range: {config.low} to {config.high}")
     st.sidebar.caption(f"Attempts allowed: {config.max_attempts}")
