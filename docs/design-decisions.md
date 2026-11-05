@@ -353,3 +353,76 @@ before there is a dashboard to read them.
 **Rationale.** Retro-fitting tracing means touching every call site. Building
 the structure while writing the loop costs almost nothing; adding it later
 would be a refactor of the thing most at risk of regression.
+
+---
+
+## D24 — Observability depends on services, never the reverse
+
+**Problem.** The usual way instrumentation rots a codebase is logging calls
+scattered through business logic, which then cannot be tested or reused
+without the logging stack.
+
+**Decision.** Services return data (`CallStats`, `AgentTrace`,
+`AssistantReply`); the UI passes that data to the tracker. No business-logic
+module imports `observability`.
+
+**Alternatives.**
+- *Decorators on service functions.* Rejected: couples every service to the
+  tracker and makes the pure functions impure to test.
+- *A logger injected into every constructor.* Rejected as ceremony for a
+  project this size.
+
+**Trade-off.** Call sites must remember to record. Acceptable because there are
+only three (the three AI pages), and the AppTest suite asserts that each one
+produces events.
+
+---
+
+## D25 — `contextvars` for request correlation
+
+**Decision.** `request_id` and `trace_id` live in context variables set by
+`tracker.request(...)`.
+
+**Rationale.** Correlation without threading an id through every signature.
+Streamlit may run callbacks on other threads, and `contextvars` are
+thread-local-ish by design, so each request's id stays its own.
+
+**Trade-off.** Implicit state, which is normally worth avoiding. Contained by
+resetting the token in a `finally`, with a test asserting the id is cleared.
+
+---
+
+## D26 — Refuse to estimate cost rather than guess
+
+**Decision.** `estimate_cost` returns `None` plus a human-readable `reason`
+for mock providers, missing usage, or unpriced models.
+
+**Rationale.** A cost figure is used to make decisions. A number inferred from
+a "similar" model, or from character counts, looks identical to a real one and
+is wrong in a way nobody notices. The dashboard shows how many calls were
+excluded so a partial total is never read as complete.
+
+**Trade-off.** Mock-mode runs show no cost at all. Correct: nothing was spent.
+
+---
+
+## D27 — `degraded` as a third status
+
+**Decision.** Status is `ok`, `error` or `degraded`, and `degraded` counts as
+success in `success_rate` while also being reported on its own.
+
+**Rationale.** A fallback hint is a *successful* user outcome and a
+*concerning* system signal. Collapsing it into either bucket loses one of
+those. Keeping `fallback_rate` separate means a provider outage shows up as a
+rising fallback rate rather than a flat success rate hiding the problem.
+
+---
+
+## D28 — A bounded store, with evictions counted
+
+**Decision.** `EventStore` is a `deque(maxlen=500)`, and `dropped_count` is
+shown in the UI.
+
+**Rationale.** An unbounded list in a long-lived Streamlit session is a slow
+memory leak. Showing the eviction count means the window is visible rather
+than being a silent reason the numbers look wrong.

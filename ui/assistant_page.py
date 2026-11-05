@@ -12,6 +12,7 @@ import streamlit as st
 
 from assistant import Assistant, AssistantReply
 from config import Settings
+from observability import Component, get_tracker
 from providers import build_client
 
 
@@ -114,7 +115,8 @@ def render(settings: Settings) -> None:
     assistant = get_assistant(settings)
 
     if want_hint or want_rules:
-        with st.spinner("Thinking…"):
+        tracker = get_tracker()
+        with st.spinner("Thinking…"), tracker.request("assistant.request"):
             if want_rules:
                 reply = assistant.explain_rules(game, question)
             else:
@@ -123,6 +125,7 @@ def render(settings: Settings) -> None:
                     last_outcome=st.session_state.get("last_outcome"),
                     question=question,
                 )
+            tracker.record_assistant_reply(reply, question)
         st.session_state.assistant_reply = reply
 
     reply = st.session_state.get("assistant_reply")

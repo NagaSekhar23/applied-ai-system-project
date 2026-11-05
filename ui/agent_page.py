@@ -12,6 +12,7 @@ import streamlit as st
 from agents import AgentConfig, AgentRun, build_agent
 from assistant import Assistant
 from config import Settings
+from observability import get_tracker
 from providers import build_client
 
 EXAMPLES = [
@@ -108,12 +109,14 @@ def render(settings: Settings) -> None:
     message = st.chat_input("Ask the agent to do something…")
     if message:
         agent = get_agent(settings)
-        with st.spinner("Working…"):
+        tracker = get_tracker()
+        with st.spinner("Working…"), tracker.request("agent.request"):
             run = agent.run(
                 message,
                 st.session_state.get("game"),
                 st.session_state.get("last_outcome"),
             )
+            tracker.record_agent_run(run)
         if run.state is not None:
             st.session_state.game = run.state
             if run.last_outcome is not None:

@@ -12,6 +12,7 @@ import streamlit as st
 
 from assistant import Assistant
 from config import Settings
+from observability import Component, Status, get_tracker
 from natural_language import (
     CommandExecutor,
     CommandParser,
@@ -46,13 +47,23 @@ def get_pipeline(settings: Settings) -> tuple[CommandParser, CommandExecutor]:
 def run_turn(message: str, settings: Settings) -> None:
     """Run one message through the pipeline and record the turn."""
     parser, executor = get_pipeline(settings)
-    turn = handle_message(
-        message,
-        st.session_state.get("game"),
-        parser,
-        executor,
-        last_outcome=st.session_state.get("last_outcome"),
-    )
+    tracker = get_tracker()
+
+    with tracker.request("nl.message"):
+        turn = handle_message(
+            message,
+            st.session_state.get("game"),
+            parser,
+            executor,
+            last_outcome=st.session_state.get("last_outcome"),
+        )
+        tracker.record_parse(turn.parse, message)
+        tracker.record_game_action(
+            f"nl.{turn.command_type.lower()}",
+            Status.OK if turn.result.executed else Status.ERROR,
+            command=turn.command_type,
+            executed=turn.result.executed,
+        )
 
     # Only a successfully executed command may change game state.
     if turn.result.executed and turn.result.state is not None:
